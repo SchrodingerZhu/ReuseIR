@@ -6,5 +6,6 @@ include(cmake/FindLLVM.cmake)
 include(cmake/FindMLIR.cmake)
 message(STATUS "include dirs for llvm and mlir: ${MLIR_INCLUDE_DIRS};${LLVM_INCLUDE_DIRS}")
 
+add_subdirectory(contrib)
 add_subdirectory(include)
 add_subdirectory(src)

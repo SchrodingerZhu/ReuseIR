@@ -40,3 +40,4 @@ Cargo.lock
 
 # VSCode
 .vscode/
+.cache
