@@ -32,8 +32,11 @@
 *.app
 
 # CMake Build directory
-build-*/
+build*/
 
 # Rust
 target/
 Cargo.lock
+
+# VSCode
+.vscode/
