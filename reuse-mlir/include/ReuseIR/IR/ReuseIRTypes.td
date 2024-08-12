@@ -19,17 +19,32 @@ def ReuseIR_FPType : AnyTypeOf<[
     Builtin_Float16, Builtin_Float32, Builtin_Float64, Builtin_Float128
 ]>;
 
-def ReuseIR_BoxType : ReuseIR_Type<"Box", "box",
+def TokenType : ReuseIR_Type<"Token", "token",
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+  let summary = "ReuseIR Memory Token";
+  let description = [{
+    `reuse_ir.token` is the token of the memory
+  }];
+  let parameters = (ins
+    "mlir::IndexAttr":$alignment,
+    "mlir::IndexAttr":$size
+  );
+  let assemblyFormat = [{
+    `<` `size` `:` $size `,` `alignment` `:` $alignment `>`
+  }];
+}
+
+def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
     [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
   let summary = "ReuseIR Control Box";
   let description = [{
-    `reuse_ir.box` is the underlying control box of RC managed objects
+    `reuse_ir.rcbox` is the underlying control box of RC managed objects
   }];
   let parameters = (ins
-    "mlir::Type":$pointee
+    "mlir::Type":$dataType
   );
   let assemblyFormat = [{
-    `<` $pointee `>`
+    `<` $dataType `>`
   }];
 }
 
