@@ -3,6 +3,7 @@
 #include "ReuseIR/IR/ReuseIRDialect.h"
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -10,13 +11,17 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <algorithm>
+#include <bits/atomic_wait.h>
+#include <llvm-20/llvm/Support/Alignment.h>
+#include <llvm-20/llvm/Support/TypeSize.h>
 
 #define GET_TYPEDEF_CLASSES
 #include "ReuseIR/IR/ReuseIROpsTypes.cpp.inc"
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
-
+#pragma push_macro("GENERATE_POINTER_ALIKE_LAYOUT")
 #define GENERATE_POINTER_ALIKE_LAYOUT(TYPE)                                    \
   ::llvm::TypeSize TYPE::getTypeSizeInBits(                                    \
       const ::mlir::DataLayout &dataLayout,                                    \
@@ -38,7 +43,56 @@ namespace REUSE_IR_DECL_SCOPE {
   }
 GENERATE_POINTER_ALIKE_LAYOUT(RcType)
 GENERATE_POINTER_ALIKE_LAYOUT(TokenType)
-#undef GENERATE_POINTER_ALIKE_LAYOUT
+GENERATE_POINTER_ALIKE_LAYOUT(MRefType)
+#pragma pop_macro("GENERATE_POINTER_ALIKE_LAYOUT")
+
+::llvm::TypeSize UnitType::getTypeSizeInBits(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  return llvm::TypeSize::getZero();
+};
+uint64_t UnitType::getABIAlignment(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  return 0;
+}
+uint64_t
+UnitType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
+                                ::mlir::DataLayoutEntryListRef params) const {
+  return 0;
+}
+
+::llvm::TypeSize RcBoxType::getTypeSizeInBits(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
+  auto idxTy = mlir::IndexType::get(getContext());
+  llvm::TypeSize ptrSize = dataLayout.getTypeSize(ptrTy);
+  llvm::TypeSize idxSize = dataLayout.getTypeSize(idxTy);
+  llvm::TypeSize headerSize = std::max(ptrSize, idxSize);
+  llvm::Align headerAlign{getABIAlignment(dataLayout, params)};
+  llvm::Align dataAlign{dataLayout.getTypeABIAlignment(getDataType())};
+  auto size = llvm::TypeSize::getFixed(llvm::alignTo(headerSize, dataAlign));
+  return (size + dataLayout.getTypeSize(getDataType())) * 8;
+};
+uint64_t RcBoxType::getABIAlignment(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
+  auto idxTy = mlir::IndexType::get(getContext());
+  return std::max({dataLayout.getTypeABIAlignment(ptrTy),
+                   dataLayout.getTypeABIAlignment(idxTy),
+                   dataLayout.getTypeABIAlignment(getDataType())});
+}
+uint64_t
+RcBoxType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
+                                 ::mlir::DataLayoutEntryListRef params) const {
+  auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
+  auto idxTy = mlir::IndexType::get(getContext());
+  return std::max({dataLayout.getTypePreferredAlignment(ptrTy),
+                   dataLayout.getTypePreferredAlignment(idxTy),
+                   dataLayout.getTypePreferredAlignment(getDataType())});
+}
 
 void ReuseIRDialect::registerTypes() {
   (void)generatedTypePrinter;

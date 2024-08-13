@@ -35,7 +35,7 @@ def TokenType : ReuseIR_Type<"Token", "token",
 }
 
 def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
-    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
   let summary = "ReuseIR Control Box";
   let description = [{
     `reuse_ir.rcbox` is the underlying control box of RC managed objects.
@@ -83,6 +83,24 @@ def ReuseIR_RcType : ReuseIR_Type<"Rc", "rc",
 
   let assemblyFormat = [{
     `<` $pointee (`,` `atomic` `:` $atomic^ )? (`,` `frozen` `:` $frozen^ )? `>`
+  }];
+}
+
+def ReuseIR_MRefType : ReuseIR_Type<"MRef", "mref",
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+
+  let summary = "ReuseIR Mutable Reference Type";
+  let description = [{
+    `reuse_ir.mref` is the mutable reference that is assignable inside a unfrozen but freezable object.
+  }];
+
+  let parameters = (ins
+    "mlir::Type":$pointee,
+    OptionalParameter<"mlir::BoolAttr">:$atomic
+  );
+
+  let assemblyFormat = [{
+    `<` $pointee (`,` `atomic` `:` $atomic^ )? `>`
   }];
 }
 
@@ -176,7 +194,7 @@ def ReuseIR_CompositeType : ReuseIR_Type<"Composite", "composite",
 }
 
 def ReuseIR_UnitType : ReuseIR_Type<"Unit", "unit",
-    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
 
   let summary = "ReuseIR Unit Type";
   let description = [{
