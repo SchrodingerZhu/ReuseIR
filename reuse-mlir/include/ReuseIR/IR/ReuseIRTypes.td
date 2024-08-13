@@ -20,14 +20,14 @@ def ReuseIR_FPType : AnyTypeOf<[
 ]>;
 
 def TokenType : ReuseIR_Type<"Token", "token",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
   let summary = "ReuseIR Memory Token";
   let description = [{
     `reuse_ir.token` is the token of the memory
   }];
   let parameters = (ins
-    "mlir::IndexAttr":$alignment,
-    "mlir::IndexAttr":$size
+    "size_t":$alignment,
+    "size_t":$size
   );
   let assemblyFormat = [{
     `<` `size` `:` $size `,` `alignment` `:` $alignment `>`
@@ -35,7 +35,7 @@ def TokenType : ReuseIR_Type<"Token", "token",
 }
 
 def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
   let summary = "ReuseIR Control Box";
   let description = [{
     `reuse_ir.rcbox` is the underlying control box of RC managed objects
@@ -67,7 +67,7 @@ def ReuseIR_RcType : ReuseIR_Type<"Rc", "rc",
 }
 
 def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
 
   let summary = "ReuseIR Reference Type";
   let description = [{
@@ -76,7 +76,7 @@ def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
 
   let parameters = (ins
     "mlir::Type":$pointee,
-    OptionalParameter<"::mlir::IndexAttr">:$rank,
+    OptionalParameter<"size_t">:$rank,
     OptionalParameter<"::mlir::BoolAttr">:$strided
   );
 
@@ -86,7 +86,7 @@ def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
 }
 
 def ReuseIR_ArrayType : ReuseIR_Type<"Array", "array",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
 
   let summary = "ReuseIR Array Type";
   let description = [{
@@ -95,7 +95,7 @@ def ReuseIR_ArrayType : ReuseIR_Type<"Array", "array",
 
   let parameters = (ins
     "mlir::Type":$elementType,
-    "::llvm::ArrayRef<::mlir::IndexAttr>":$sizes
+    ArrayRefParameter<"size_t">:$sizes
   );
 
   let assemblyFormat = [{
@@ -104,7 +104,7 @@ def ReuseIR_ArrayType : ReuseIR_Type<"Array", "array",
 }
 
 def ReuseIR_VectorType : ReuseIR_Type<"Vector", "vector",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
 
   let summary = "ReuseIR Vector Type";
   let description = [{
@@ -121,7 +121,7 @@ def ReuseIR_VectorType : ReuseIR_Type<"Vector", "vector",
 }
 
 def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
 
   let summary = "ReuseIR Opaque Type";
   let description = [{
@@ -129,8 +129,8 @@ def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
   }];
 
   let parameters = (ins
-    "mlir::IndexAttr":$size,
-    "mlir::IndexAttr":$alignment
+    "mlir::IntegerAttr":$size,
+    "mlir::IntegerAttr":$alignment
   );
 
   let assemblyFormat = [{
@@ -139,7 +139,7 @@ def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
 }
 
 def ReuseIR_CompositeType : ReuseIR_Type<"Composite", "composite",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
 
   let summary = "ReuseIR Composite Type";
   let description = [{
@@ -147,17 +147,16 @@ def ReuseIR_CompositeType : ReuseIR_Type<"Composite", "composite",
   }];
 
   let parameters = (ins
-    "::llvm::ArrayRef<::mlir::Type>":$memberTypes,
-    OptionalParameter<"::llvm::StringRef">:$name
+    ArrayRefParameter<"mlir::Type">:$memberTypes
   );
 
   let assemblyFormat = [{
-    `<` $memberTypes ( `,` `name` `:` $name^ )? `>`
+    `<` $memberTypes `>`
   }];
 }
 
 def ReuseIR_UnitType : ReuseIR_Type<"Unit", "unit",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
 
   let summary = "ReuseIR Unit Type";
   let description = [{
@@ -166,7 +165,7 @@ def ReuseIR_UnitType : ReuseIR_Type<"Unit", "unit",
 }
 
 def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
 
   let summary = "ReuseIR Union Type";
   let description = [{
@@ -174,17 +173,16 @@ def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",
   }];
 
   let parameters = (ins
-    "::llvm::ArrayRef<::mlir::Type>":$memberTypes,
-    OptionalParameter<"::llvm::StringRef">:$name
+    ArrayRefParameter<"::mlir::Type">:$memberTypes
   );
 
   let assemblyFormat = [{
-    `<` $memberTypes ( `,` `name` `:` $name^ )? `>`
+    `<` $memberTypes `>`
   }];
 }
 
 def ReuseIR_ClosureType : ReuseIR_Type<"Closure", "closure",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
 
   let summary = "ReuseIR Closure Type";
   let description = [{
@@ -192,7 +190,7 @@ def ReuseIR_ClosureType : ReuseIR_Type<"Closure", "closure",
   }];
 
   let parameters = (ins
-    "::llvm::ArrayRef<::mlir::Type>":$inputTypes,
+    ArrayRefParameter<"::mlir::Type">:$inputTypes,
     "::mlir::Type":$outputType
   );
 

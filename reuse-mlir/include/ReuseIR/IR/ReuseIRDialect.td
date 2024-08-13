@@ -11,6 +11,8 @@ def ReuseIR_Dialect : Dialect {
 
   let cppNamespace = "::mlir::reuse_ir";
 
+  let hasConstantMaterializer = 1;
+
   let extraClassDeclaration = [{
   void registerAttributes();
   void registerTypes();
@@ -18,7 +20,8 @@ def ReuseIR_Dialect : Dialect {
 
   let dependentDialects = [
     "::mlir::BuiltinDialect",
-    "::mlir::func::FuncDialect"
+    "::mlir::func::FuncDialect",
+    "::mlir::LLVM::LLVMDialect",
   ];
 }
 
