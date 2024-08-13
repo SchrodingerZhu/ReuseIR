@@ -38,13 +38,32 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
     [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
   let summary = "ReuseIR Control Box";
   let description = [{
-    `reuse_ir.rcbox` is the underlying control box of RC managed objects
+    `reuse_ir.rcbox` is the underlying control box of RC managed objects.
+    It has the following varaints:
+    - Non-atomic plain RC
+    - Non-atomic freezable RC
+    - Atomic plain RC
+    - Atomic freezable RC
+    Despite their differences, the layout of the box always looks like the
+    following:
+    ```
+    RcBox<T> {
+        Status status;
+        T data;
+    };
+    ```
+    For Non-freezable variants, status is simply an index type.
+    For freezable varaints, status is also of the same size but it is actually 
+    a tagged pointer. Please refer to https://dl.acm.org/doi/abs/10.1145/3652024.3665507
+    for more details.
   }];
   let parameters = (ins
-    "mlir::Type":$dataType
+    "mlir::Type":$dataType,
+    OptionalParameter<"mlir::BoolAttr">:$atomic,
+    OptionalParameter<"mlir::BoolAttr">:$freezable
   );
   let assemblyFormat = [{
-    `<` $dataType `>`
+    `<` $dataType (`,` `atomic` `:` $atomic^ )? (`,` `freezable` `:` $freezable^ )? `>`
   }];
 }
 
@@ -58,11 +77,12 @@ def ReuseIR_RcType : ReuseIR_Type<"Rc", "rc",
 
   let parameters = (ins
     "mlir::Type":$pointee,
-    OptionalParameter<"mlir::BoolAttr">:$atomic
+    OptionalParameter<"mlir::BoolAttr">:$atomic,
+    OptionalParameter<"mlir::BoolAttr">:$frozen
   );
 
   let assemblyFormat = [{
-    `<` $pointee ( `,` `atomic` `:` $atomic^ )? `>`
+    `<` $pointee (`,` `atomic` `:` $atomic^ )? (`,` `frozen` `:` $frozen^ )? `>`
   }];
 }
 
