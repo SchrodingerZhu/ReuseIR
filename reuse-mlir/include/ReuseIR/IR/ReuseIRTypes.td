@@ -20,7 +20,7 @@ def ReuseIR_FPType : AnyTypeOf<[
 ]>;
 
 def TokenType : ReuseIR_Type<"Token", "token",
-    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
   let summary = "ReuseIR Memory Token";
   let description = [{
     `reuse_ir.token` is the token of the memory

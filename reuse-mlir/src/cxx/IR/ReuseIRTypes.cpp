@@ -17,24 +17,28 @@
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
 
-::llvm::TypeSize RcType::getTypeSizeInBits(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return dataLayout.getTypeSizeInBits(
-      mlir::LLVM::LLVMPointerType::get(getContext()));
-};
-uint64_t RcType::getABIAlignment(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return dataLayout.getTypeABIAlignment(
-      mlir::LLVM::LLVMPointerType::get(getContext()));
-}
-uint64_t
-RcType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
-                              ::mlir::DataLayoutEntryListRef params) const {
-  return dataLayout.getTypePreferredAlignment(
-      mlir::LLVM::LLVMPointerType::get(getContext()));
-}
+#define GENERATE_POINTER_ALIKE_LAYOUT(TYPE)                                    \
+  ::llvm::TypeSize TYPE::getTypeSizeInBits(                                    \
+      const ::mlir::DataLayout &dataLayout,                                    \
+      [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {          \
+    return dataLayout.getTypeSizeInBits(                                       \
+        mlir::LLVM::LLVMPointerType::get(getContext()));                       \
+  };                                                                           \
+  uint64_t TYPE::getABIAlignment(                                              \
+      const ::mlir::DataLayout &dataLayout,                                    \
+      [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {          \
+    return dataLayout.getTypeABIAlignment(                                     \
+        mlir::LLVM::LLVMPointerType::get(getContext()));                       \
+  }                                                                            \
+  uint64_t TYPE::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,   \
+                                       ::mlir::DataLayoutEntryListRef params)  \
+      const {                                                                  \
+    return dataLayout.getTypePreferredAlignment(                               \
+        mlir::LLVM::LLVMPointerType::get(getContext()));                       \
+  }
+GENERATE_POINTER_ALIKE_LAYOUT(RcType)
+GENERATE_POINTER_ALIKE_LAYOUT(TokenType)
+#undef GENERATE_POINTER_ALIKE_LAYOUT
 
 void ReuseIRDialect::registerTypes() {
   (void)generatedTypePrinter;
