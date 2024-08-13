@@ -11,10 +11,9 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Alignment.h"
+#include "llvm/Support/TypeSize.h"
 #include <algorithm>
-#include <bits/atomic_wait.h>
-#include <llvm-20/llvm/Support/Alignment.h>
-#include <llvm-20/llvm/Support/TypeSize.h>
 
 #define GET_TYPEDEF_CLASSES
 #include "ReuseIR/IR/ReuseIROpsTypes.cpp.inc"
@@ -70,10 +69,14 @@ UnitType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
   llvm::TypeSize ptrSize = dataLayout.getTypeSize(ptrTy);
   llvm::TypeSize idxSize = dataLayout.getTypeSize(idxTy);
   llvm::TypeSize headerSize = std::max(ptrSize, idxSize);
-  llvm::Align headerAlign{getABIAlignment(dataLayout, params)};
-  llvm::Align dataAlign{dataLayout.getTypeABIAlignment(getDataType())};
-  auto size = llvm::TypeSize::getFixed(llvm::alignTo(headerSize, dataAlign));
-  return (size + dataLayout.getTypeSize(getDataType())) * 8;
+  if (getFreezable())
+    headerSize *= 2;
+  auto size = llvm::TypeSize::getFixed(
+      llvm::alignTo(headerSize, dataLayout.getTypeABIAlignment(getDataType())));
+  size += dataLayout.getTypeSize(getDataType());
+  size = llvm::TypeSize::getFixed(
+      llvm::alignTo(size, getABIAlignment(dataLayout, params)));
+  return size * 8;
 };
 uint64_t RcBoxType::getABIAlignment(
     const ::mlir::DataLayout &dataLayout,

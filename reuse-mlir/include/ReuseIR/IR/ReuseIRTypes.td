@@ -44,18 +44,26 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
     - Non-atomic freezable RC
     - Atomic plain RC
     - Atomic freezable RC
-    Despite their differences, the layout of the box always looks like the
-    following:
+    For Non-freezable variants, status is simply an index type:
     ```
     RcBox<T> {
-        Status status;
+        size_t status;
         T data;
     };
     ```
-    For Non-freezable variants, status is simply an index type.
     For freezable varaints, status is also of the same size but it is actually 
     a tagged pointer. Please refer to https://dl.acm.org/doi/abs/10.1145/3652024.3665507
-    for more details.
+    for more details:
+    ```
+    RcBox<T> {
+        union {
+          size_t status;
+          RcBox* root;
+        } status;
+        RcBox* next;
+        T data;
+    };
+    ```
   }];
   let parameters = (ins
     "mlir::Type":$dataType,
