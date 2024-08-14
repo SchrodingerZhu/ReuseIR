@@ -20,7 +20,7 @@ include "ReuseIR/IR/ReuseIRTypes.td"
 class ReuseIR_Op<string mnemonic, list<Trait> traits = []> :
     Op<ReuseIR_Dialect, mnemonic, traits>;
 
-def AllocOp : ReuseIR_Op<"alloc"> {
+def AllocOp : ReuseIR_Op<"alloc", []> {
 
   let summary = "Allocate memory token";
   let description = [{
@@ -30,7 +30,9 @@ def AllocOp : ReuseIR_Op<"alloc"> {
     ```
   }];
 
-  let results = (outs ReuseIR_TokenType:$token);
+  let results = (outs Res<
+    ReuseIR_TokenType,
+    "Allocated Memory Token", [MemAlloc<DefaultResource>]>:$token);
 
   let assemblyFormat = [{
     `:` type($token) attr-dict
@@ -49,7 +51,7 @@ def IncOp : ReuseIR_Op<"inc"> {
     ```
   }];
 
-  let arguments = (ins ReuseIR_RcType:$rcPtr, OptionalAttr<I64Attr>:$count);
+  let arguments = (ins Arg<ReuseIR_RcType, "RC pointer", [MemReadAt<0>, MemReadAt<1>]>:$rcPtr, OptionalAttr<I64Attr>:$count);
 
   let assemblyFormat = [{
     `(` $rcPtr `:` type($rcPtr)  (`,` $count^ )? `)` attr-dict

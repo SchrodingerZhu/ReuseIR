@@ -19,7 +19,5 @@ llvm::LogicalResult IncOp::verify() {
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 
-#pragma GCC visibility push(hidden)
 #define GET_OP_CLASSES
 #include "ReuseIR/IR/ReuseIROps.cpp.inc"
-#pragma GCC visibility pop

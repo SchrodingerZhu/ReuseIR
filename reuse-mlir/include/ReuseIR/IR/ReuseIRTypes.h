@@ -11,10 +11,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include <optional>
 
-#pragma GCC visibility push(hidden)
 #define GET_TYPEDEF_CLASSES
 #include "ReuseIR/IR/ReuseIROpsTypes.h.inc"
-#pragma GCC visibility pop
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {

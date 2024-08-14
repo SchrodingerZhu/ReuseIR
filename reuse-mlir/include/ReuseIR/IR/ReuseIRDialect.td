@@ -12,6 +12,7 @@ def ReuseIR_Dialect : Dialect {
   let cppNamespace = "::mlir::reuse_ir";
 
   let hasConstantMaterializer = 1;
+  let useDefaultTypePrinterParser = 1;
 
   let extraClassDeclaration = [{
   void registerAttributes();
