@@ -19,7 +19,7 @@ def ReuseIR_FPType : AnyTypeOf<[
     Builtin_Float16, Builtin_Float32, Builtin_Float64, Builtin_Float128
 ]>;
 
-def TokenType : ReuseIR_Type<"Token", "token",
+def ReuseIR_TokenType : ReuseIR_Type<"Token", "token",
     [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
   let summary = "ReuseIR Memory Token";
   let description = [{
@@ -32,9 +32,10 @@ def TokenType : ReuseIR_Type<"Token", "token",
   let assemblyFormat = [{
     `<` `size` `:` $size `,` `alignment` `:` $alignment `>`
   }];
+  let genVerifyDecl = 1;
 }
 
-def RegionCtxType : ReuseIR_Type<"RegionCtx", "region_ctx",
+def ReuseIR_RegionCtxType : ReuseIR_Type<"RegionCtx", "region_ctx",
     [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
   let summary = "ReuseIR Region Context";
   let description = [{

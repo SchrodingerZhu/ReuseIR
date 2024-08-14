@@ -20,6 +20,25 @@ include "ReuseIR/IR/ReuseIRTypes.td"
 class ReuseIR_Op<string mnemonic, list<Trait> traits = []> :
     Op<ReuseIR_Dialect, mnemonic, traits>;
 
+def AllocOp : ReuseIR_Op<"alloc"> {
+
+  let summary = "Allocate memory token";
+  let description = [{
+    `reuse_ir.alloc` allocates a memory token.
+    ```mlir
+    reuse_ir.alloc : !reuse_ir.token<size: 16, alignment: 8>
+    ```
+  }];
+
+  let results = (outs ReuseIR_TokenType:$token);
+
+  let assemblyFormat = [{
+    `:` type($token) attr-dict
+  }];
+
+  let hasVerifier = 0;
+}
+
 def IncOp : ReuseIR_Op<"inc"> {
 
   let summary = "Increase reference count";

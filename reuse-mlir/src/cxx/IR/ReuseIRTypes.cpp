@@ -17,6 +17,7 @@
 #include "llvm/Support/TypeSize.h"
 #include <algorithm>
 #include <cstddef>
+#include <llvm-20/llvm/Support/MathExtras.h>
 #include <numeric>
 
 #define GET_TYPEDEF_CLASSES
@@ -214,6 +215,19 @@ uint64_t
 OpaqueType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
                                   ::mlir::DataLayoutEntryListRef params) const {
   return getAlignment().getUInt();
+}
+
+// Token Verifier:
+::llvm::LogicalResult
+TokenType::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+                  size_t alignment, size_t size) {
+  if (!llvm::isPowerOf2_64(alignment))
+    return emitError() << "Alignment must be a power of 2";
+  if (size == 0)
+    return emitError() << "Size must be non-zero";
+  if (size % alignment != 0)
+    return emitError() << "Size must be a multiple of alignment";
+  return ::llvm::success();
 }
 
 void ReuseIRDialect::registerTypes() {

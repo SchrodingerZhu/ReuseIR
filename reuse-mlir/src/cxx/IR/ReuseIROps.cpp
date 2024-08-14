@@ -5,6 +5,7 @@
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
+// IncOp
 llvm::LogicalResult IncOp::verify() {
   RcType rcPtrTy = getRcPtr().getType();
   if (auto attr = rcPtrTy.getFrozen())
