@@ -41,6 +41,26 @@ def AllocOp : ReuseIR_Op<"alloc", []> {
   let hasVerifier = 0;
 }
 
+def FreeOp : ReuseIR_Op<"free", []> {
+  let summary = "Free memory token";
+  let description = [{
+    `reuse_ir.free` deallocates a memory token.
+    ```mlir
+    reuse_ir.free (%x : !reuse_ir.token<size: 16, alignment: 8>)
+    ```
+  }];
+
+  let arguments = (ins Res<
+    ReuseIR_TokenType,
+    "Free Memory Token", [MemFree<DefaultResource>]>:$token);
+
+  let assemblyFormat = [{
+    `(` $token `:` type($token) `)` attr-dict
+  }];
+
+  let hasVerifier = 0;
+}
+
 def IncOp : ReuseIR_Op<"inc"> {
 
   let summary = "Increase reference count";
