@@ -9,11 +9,15 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/MLIRContext.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/TypeSize.h"
 #include <algorithm>
+#include <cstddef>
+#include <numeric>
 
 #define GET_TYPEDEF_CLASSES
 #include "ReuseIR/IR/ReuseIROpsTypes.cpp.inc"
@@ -46,6 +50,25 @@ GENERATE_POINTER_ALIKE_LAYOUT(MRefType)
 GENERATE_POINTER_ALIKE_LAYOUT(RegionCtxType)
 #pragma pop_macro("GENERATE_POINTER_ALIKE_LAYOUT")
 
+static uint64_t
+maxABIAlignmentOfPtrAndIndex(const ::mlir::DataLayout &dataLayout,
+                             mlir::MLIRContext *ctx) {
+  auto ptrTy = mlir::LLVM::LLVMPointerType::get(ctx);
+  auto idxTy = mlir::IndexType::get(ctx);
+  return std::max(dataLayout.getTypeABIAlignment(ptrTy),
+                  dataLayout.getTypeABIAlignment(idxTy));
+}
+
+static uint64_t
+maxPreferredAlignmentOfPtrAndIndex(const ::mlir::DataLayout &dataLayout,
+                                   mlir::MLIRContext *ctx) {
+  auto ptrTy = mlir::LLVM::LLVMPointerType::get(ctx);
+  auto idxTy = mlir::IndexType::get(ctx);
+  return std::max(dataLayout.getTypePreferredAlignment(ptrTy),
+                  dataLayout.getTypePreferredAlignment(idxTy));
+}
+
+// Unit DataLayoutInterface:
 ::llvm::TypeSize UnitType::getTypeSizeInBits(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
@@ -62,6 +85,7 @@ UnitType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
   return 0;
 }
 
+// RcBox DataLayoutInterface:
 ::llvm::TypeSize RcBoxType::getTypeSizeInBits(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
@@ -82,20 +106,114 @@ UnitType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
 uint64_t RcBoxType::getABIAlignment(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
-  auto idxTy = mlir::IndexType::get(getContext());
-  return std::max({dataLayout.getTypeABIAlignment(ptrTy),
-                   dataLayout.getTypeABIAlignment(idxTy),
-                   dataLayout.getTypeABIAlignment(getDataType())});
+  return std::max(maxABIAlignmentOfPtrAndIndex(dataLayout, getContext()),
+                  dataLayout.getTypeABIAlignment(getDataType()));
 }
 uint64_t
 RcBoxType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
                                  ::mlir::DataLayoutEntryListRef params) const {
+  return std::max(maxPreferredAlignmentOfPtrAndIndex(dataLayout, getContext()),
+                  dataLayout.getTypePreferredAlignment(getDataType()));
+}
+
+// Ref DataLayoutInterface:
+::llvm::TypeSize RefType::getTypeSizeInBits(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
   auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
   auto idxTy = mlir::IndexType::get(getContext());
-  return std::max({dataLayout.getTypePreferredAlignment(ptrTy),
-                   dataLayout.getTypePreferredAlignment(idxTy),
-                   dataLayout.getTypePreferredAlignment(getDataType())});
+  llvm::TypeSize size = dataLayout.getTypeSize(ptrTy);
+  llvm::TypeSize idxSize = dataLayout.getTypeSize(idxTy);
+  llvm::Align idxAlign{dataLayout.getTypeABIAlignment(idxTy)};
+  if (getRank() != 0) {
+    size = llvm::TypeSize::getFixed(llvm::alignTo(size, idxAlign));
+    size += idxSize * getRank();
+    if (getStrided())
+      size += idxSize * getRank();
+    size = llvm::TypeSize::getFixed(
+        llvm::alignTo(size, getABIAlignment(dataLayout, params)));
+  }
+  return size * 8;
+}
+
+uint64_t RefType::getABIAlignment(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  return maxABIAlignmentOfPtrAndIndex(dataLayout, getContext());
+}
+
+uint64_t
+RefType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
+                               ::mlir::DataLayoutEntryListRef params) const {
+  return maxPreferredAlignmentOfPtrAndIndex(dataLayout, getContext());
+}
+
+// Array DataLayoutInterface:
+::llvm::TypeSize ArrayType::getTypeSizeInBits(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  size_t numOfElems = std::reduce(getSizes().begin(), getSizes().end(), 1,
+                                  std::multiplies<size_t>());
+  return dataLayout.getTypeSizeInBits(getElementType()) * numOfElems;
+}
+
+uint64_t ArrayType::getABIAlignment(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  return dataLayout.getTypeABIAlignment(getElementType());
+}
+
+uint64_t
+ArrayType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
+                                 ::mlir::DataLayoutEntryListRef params) const {
+  return dataLayout.getTypePreferredAlignment(getElementType());
+}
+
+// Vector DataLayoutInterface:
+::llvm::TypeSize VectorType::getTypeSizeInBits(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
+  auto idxTy = mlir::IndexType::get(getContext());
+  llvm::TypeSize size = dataLayout.getTypeSize(ptrTy);
+  llvm::TypeSize idxSize = dataLayout.getTypeSize(idxTy);
+  llvm::Align idxAlign{dataLayout.getTypeABIAlignment(idxTy)};
+  size = llvm::TypeSize::getFixed(llvm::alignTo(size, idxAlign));
+  size += idxSize * 2;
+  size = llvm::TypeSize::getFixed(
+      llvm::alignTo(size, getABIAlignment(dataLayout, params)));
+  return size * 8;
+}
+
+uint64_t VectorType::getABIAlignment(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  return maxABIAlignmentOfPtrAndIndex(dataLayout, getContext());
+}
+
+uint64_t
+VectorType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
+                                  ::mlir::DataLayoutEntryListRef params) const {
+  return maxPreferredAlignmentOfPtrAndIndex(dataLayout, getContext());
+}
+
+// Opaque DataLayoutInterface:
+::llvm::TypeSize OpaqueType::getTypeSizeInBits(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  return llvm::TypeSize::getFixed(getSize().getUInt());
+}
+
+uint64_t OpaqueType::getABIAlignment(
+    const ::mlir::DataLayout &dataLayout,
+    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
+  return getAlignment().getUInt();
+}
+
+uint64_t
+OpaqueType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
+                                  ::mlir::DataLayoutEntryListRef params) const {
+  return getAlignment().getUInt();
 }
 
 void ReuseIRDialect::registerTypes() {

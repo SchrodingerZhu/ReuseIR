@@ -122,7 +122,7 @@ def ReuseIR_MRefType : ReuseIR_Type<"MRef", "mref",
 }
 
 def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
-    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
 
   let summary = "ReuseIR Reference Type";
   let description = [{
@@ -141,7 +141,7 @@ def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
 }
 
 def ReuseIR_ArrayType : ReuseIR_Type<"Array", "array",
-    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
 
   let summary = "ReuseIR Array Type";
   let description = [{
@@ -159,11 +159,16 @@ def ReuseIR_ArrayType : ReuseIR_Type<"Array", "array",
 }
 
 def ReuseIR_VectorType : ReuseIR_Type<"Vector", "vector",
-    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
 
   let summary = "ReuseIR Vector Type";
   let description = [{
-    `reuse_ir.vector` is a single-dimension vector with dynamic length
+    `reuse_ir.vector` is a single-dimension vector with dynamic length.
+    Vec<T> {
+      T* data;
+      size_t capacity;
+      size_t length;
+    }
   }];
 
   let parameters = (ins
@@ -176,7 +181,7 @@ def ReuseIR_VectorType : ReuseIR_Type<"Vector", "vector",
 }
 
 def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
-    [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
 
   let summary = "ReuseIR Opaque Type";
   let description = [{
@@ -198,7 +203,10 @@ def ReuseIR_CompositeType : ReuseIR_Type<"Composite", "composite",
 
   let summary = "ReuseIR Composite Type";
   let description = [{
-    `reuse_ir.composite` is a composite type of other types
+    `reuse_ir.composite` is a composite type of other types.
+    struct {
+      Types...;
+    }
   }];
 
   let parameters = (ins
@@ -212,19 +220,23 @@ def ReuseIR_CompositeType : ReuseIR_Type<"Composite", "composite",
 
 def ReuseIR_UnitType : ReuseIR_Type<"Unit", "unit",
     [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
-
   let summary = "ReuseIR Unit Type";
   let description = [{
-    `reuse_ir.unit` is the unit type.
+    `reuse_ir.unit` is the unit type. llvm.struct {}.
   }];
 }
 
 def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",
     [/*DeclareTypeInterfaceMethods<DataLayoutTypeInterface>*/]> {
-
   let summary = "ReuseIR Union Type";
   let description = [{
     `reuse_ir.union` is a tagged union of other types
+    struct {
+      size_t tag;
+      union {
+        Types...;
+      };
+    }
   }];
 
   let parameters = (ins
@@ -241,7 +253,17 @@ def ReuseIR_ClosureType : ReuseIR_Type<"Closure", "closure",
 
   let summary = "ReuseIR Closure Type";
   let description = [{
-    `reuse_ir.closure` is for capturing lambda expressions 
+    `reuse_ir.closure` is for capturing lambda expressions.
+    struct Closure {
+      void* func;
+      void* destructor;
+      void* clone;
+      size_t expected;
+      size_t applied;
+      struct {
+        Args...;
+      };
+    };
   }];
 
   let parameters = (ins
