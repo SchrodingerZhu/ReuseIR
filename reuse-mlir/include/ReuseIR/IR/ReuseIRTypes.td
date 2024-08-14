@@ -34,6 +34,15 @@ def TokenType : ReuseIR_Type<"Token", "token",
   }];
 }
 
+def RegionCtxType : ReuseIR_Type<"RegionCtx", "region_ctx",
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+  let summary = "ReuseIR Region Context";
+  let description = [{
+    `reuse_ir.region_ctx` is used to track mutable subregions.
+    It contains the root for regional garbage collection.
+  }];
+}
+
 def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
     [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
   let summary = "ReuseIR Control Box";
