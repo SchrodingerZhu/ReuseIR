@@ -1,5 +1,7 @@
 #include "ReuseIR/IR/ReuseIRDialect.h"
 #include "ReuseIR/Common.h"
+#include "ReuseIR/IR/ReuseIROps.h"
+
 #include "cxx-rs/cxx.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"

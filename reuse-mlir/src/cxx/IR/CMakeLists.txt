@@ -4,6 +4,7 @@ add_mlir_dialect_library(ReuseIR
     ReuseIRDialect.cpp
     ReuseIRTypes.cpp
     ReuseIRAttrs.cpp
+    ReuseIROps.cpp
   DEPENDS
     MLIRReuseIROpsIncGen
   LINK_COMPONENTS
