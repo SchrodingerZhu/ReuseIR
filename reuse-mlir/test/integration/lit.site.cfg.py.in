@@ -1,0 +1,9 @@
+import os
+
+config.test_root = r'@CMAKE_CURRENT_SOURCE_DIR@'
+config.binary_path = r'@CMAKE_RUNTIME_OUTPUT_DIRECTORY@'
+config.filecheck = r'@filecheck_path@'
+config.test_output_root = r'@CMAKE_CURRENT_BINARY_DIR@'
+
+lit_config.load_config(
+        config, os.path.join(config.test_root, "lit.cfg.py"))
