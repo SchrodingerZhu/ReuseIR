@@ -233,7 +233,7 @@ def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",
   let description = [{
     `reuse_ir.union` is a tagged union of other types
     struct {
-      size_t tag;
+      <...> tag;
       union {
         Types...;
       };
@@ -246,6 +246,22 @@ def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",
 
   let assemblyFormat = [{
     `<` $memberTypes `>`
+  }];
+
+  let extraClassDeclaration = [{
+  ::mlir::IntegerType getTagType() const {
+    return ::mlir::IntegerType::get(getContext(), ::llvm::Log2_64(::llvm::PowerOf2Ceil(getMemberTypes().size())));
+  }
+  std::pair<::llvm::TypeSize, ::llvm::Align> getDataLayout(::mlir::DataLayout layout) const {
+    ::llvm::TypeSize size = ::llvm::TypeSize::getZero();
+    ::llvm::Align alignment {1};
+    for (auto type : getMemberTypes()) {
+        size = std::max(size, ::llvm::TypeSize::getFixed(layout.getTypeSize(type)));
+        alignment = std::max(alignment, ::llvm::Align(layout.getTypeABIAlignment(type)));
+    }
+    size = ::llvm::alignTo(size, alignment.value());
+    return {size, alignment};
+  }
   }];
 }
 

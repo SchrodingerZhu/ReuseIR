@@ -28,7 +28,6 @@ namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
 
 void populateLLVMTypeConverter(mlir::DataLayout layout,
-                               mlir::DataLayoutEntryListRef params,
                                mlir::LLVMTypeConverter &converter) {
   converter.addConversion([](RcType type) -> Type {
     return mlir::LLVM::LLVMPointerType::get(type.getContext());
@@ -49,7 +48,7 @@ void populateLLVMTypeConverter(mlir::DataLayout layout,
   converter.addConversion([](UnitType type) -> Type {
     return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), {});
   });
-  converter.addConversion([](ClosureType type) -> std::optional<Type> {
+  converter.addConversion([](ClosureType type) -> Type {
     auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
     return LLVM::LLVMStructType::getLiteral(
         type.getContext(), {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy});
@@ -61,8 +60,41 @@ void populateLLVMTypeConverter(mlir::DataLayout layout,
     return eltTy;
   });
   converter.addConversion([](OpaqueType type) -> Type {
-    return mlir::LLVM::LLVMArrayType::get(
-        mlir::IntegerType::get(type.getContext(), 8), type.getSize().getUInt());
+    auto alignment = type.getAlignment().getUInt();
+    auto size = type.getSize().getUInt();
+    auto cnt = size / alignment;
+    auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
+        mlir::IntegerType::get(type.getContext(), 8), alignment);
+    auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
+    return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), dataArea);
+  });
+  converter.addConversion([&converter, layout](UnionType type) -> Type {
+    auto tagType = type.getTagType();
+    auto [dataSz, dataAlign] = type.getDataLayout(layout);
+    auto cnt = dataSz.getFixedValue() / dataAlign.value();
+    auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
+        mlir::IntegerType::get(type.getContext(), 8), dataAlign.value());
+    auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
+    CompositeLayout unionLayout{layout, {tagType, dataArea}};
+    return unionLayout.getLLVMType(converter);
+  });
+  converter.addConversion([&converter, layout](VectorType type) -> Type {
+    auto idxTy = converter.getIndexType();
+    auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
+    CompositeLayout targetLayout{layout, {ptrTy, idxTy, idxTy}};
+    return targetLayout.getLLVMType(converter);
+  });
+  converter.addConversion([&converter, layout](RcBoxType type) -> Type {
+    auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
+    auto ptrEqSize = mlir::IntegerType::get(&converter.getContext(),
+                                            layout.getTypeSizeInBits(ptrTy));
+    auto indexTy = mlir::IntegerType::get(&converter.getContext(),
+                                          layout.getTypeSizeInBits(ptrTy));
+    auto targetLayout =
+        type.getFreezable()
+            ? CompositeLayout{layout, {indexTy, type.getDataType()}}
+            : CompositeLayout{layout, {ptrEqSize, ptrTy, type.getDataType()}};
+    return targetLayout.getLLVMType(converter);
   });
 } // namespace REUSE_IR_DECL_SCOPE
 
