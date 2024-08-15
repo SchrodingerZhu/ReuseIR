@@ -2,6 +2,7 @@
 #include "ReuseIR/Common.h"
 #include "ReuseIR/IR/ReuseIRDialect.h"
 
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Attributes.h"
@@ -45,9 +46,6 @@ void populateLLVMTypeConverter(mlir::DataLayout layout,
     CompositeLayout targetLayout{layout, type.getMemberTypes()};
     return targetLayout.getLLVMType(converter);
   });
-  converter.addConversion([](UnitType type) -> Type {
-    return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), {});
-  });
   converter.addConversion([](ClosureType type) -> Type {
     auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
     return LLVM::LLVMStructType::getLiteral(
@@ -85,16 +83,7 @@ void populateLLVMTypeConverter(mlir::DataLayout layout,
     return targetLayout.getLLVMType(converter);
   });
   converter.addConversion([&converter, layout](RcBoxType type) -> Type {
-    auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
-    auto ptrEqSize = mlir::IntegerType::get(&converter.getContext(),
-                                            layout.getTypeSizeInBits(ptrTy));
-    auto indexTy = mlir::IntegerType::get(&converter.getContext(),
-                                          layout.getTypeSizeInBits(ptrTy));
-    auto targetLayout =
-        type.getFreezable()
-            ? CompositeLayout{layout, {indexTy, type.getDataType()}}
-            : CompositeLayout{layout, {ptrEqSize, ptrTy, type.getDataType()}};
-    return targetLayout.getLLVMType(converter);
+    return type.getCompositeLayout(layout).getLLVMType(converter);
   });
 } // namespace REUSE_IR_DECL_SCOPE
 
@@ -142,52 +131,22 @@ maxPreferredAlignmentOfPtrAndIndex(const ::mlir::DataLayout &dataLayout,
                   dataLayout.getTypePreferredAlignment(idxTy));
 }
 
-// Unit DataLayoutInterface:
-::llvm::TypeSize UnitType::getTypeSizeInBits(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return llvm::TypeSize::getZero();
-};
-uint64_t UnitType::getABIAlignment(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return 0;
-}
-uint64_t
-UnitType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
-                                ::mlir::DataLayoutEntryListRef params) const {
-  return 0;
-}
-
 // RcBox DataLayoutInterface:
 ::llvm::TypeSize RcBoxType::getTypeSizeInBits(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
-  auto idxTy = mlir::IndexType::get(getContext());
-  llvm::TypeSize ptrSize = dataLayout.getTypeSize(ptrTy);
-  llvm::TypeSize idxSize = dataLayout.getTypeSize(idxTy);
-  llvm::TypeSize headerSize = std::max(ptrSize, idxSize);
-  if (getFreezable())
-    headerSize *= 2;
-  auto size = llvm::TypeSize::getFixed(
-      llvm::alignTo(headerSize, dataLayout.getTypeABIAlignment(getDataType())));
-  size += dataLayout.getTypeSize(getDataType());
-  size = llvm::TypeSize::getFixed(
-      llvm::alignTo(size, getABIAlignment(dataLayout, params)));
-  return size * 8;
+  return getCompositeLayout(dataLayout).getSize() * 8;
 };
+
 uint64_t RcBoxType::getABIAlignment(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return std::max(maxABIAlignmentOfPtrAndIndex(dataLayout, getContext()),
-                  dataLayout.getTypeABIAlignment(getDataType()));
+  return getCompositeLayout(dataLayout).getAlignment().value();
 }
 uint64_t
 RcBoxType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
                                  ::mlir::DataLayoutEntryListRef params) const {
-  return std::max(maxPreferredAlignmentOfPtrAndIndex(dataLayout, getContext()),
-                  dataLayout.getTypePreferredAlignment(getDataType()));
+  return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
 // Ref DataLayoutInterface:

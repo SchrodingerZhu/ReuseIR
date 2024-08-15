@@ -83,6 +83,17 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
   let assemblyFormat = [{
     `<` $dataType (`,` `atomic` `:` $atomic^ )? (`,` `freezable` `:` $freezable^ )? `>`
   }];
+  let extraClassDeclaration = [{
+    ::mlir::reuse_ir::CompositeLayout getCompositeLayout(::mlir::DataLayout layout) const {
+        auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
+        auto ptrEqSize = ::mlir::IntegerType::get(getContext(),
+                                            layout.getTypeSizeInBits(ptrTy));
+        auto indexTy = ::mlir::IndexType::get(getContext());
+        return getFreezable()
+            ? CompositeLayout{layout, {indexTy, getDataType()}}
+            : CompositeLayout{layout, {ptrEqSize, ptrTy, getDataType()}};
+    }
+  }];
 }
 
 def ReuseIR_RcType : ReuseIR_Type<"Rc", "rc",
@@ -216,14 +227,6 @@ def ReuseIR_CompositeType : ReuseIR_Type<"Composite", "composite",
 
   let assemblyFormat = [{
     `<` $memberTypes `>`
-  }];
-}
-
-def ReuseIR_UnitType : ReuseIR_Type<"Unit", "unit",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
-  let summary = "ReuseIR Unit Type";
-  let description = [{
-    `reuse_ir.unit` is the unit type. llvm.struct {}.
   }];
 }
 

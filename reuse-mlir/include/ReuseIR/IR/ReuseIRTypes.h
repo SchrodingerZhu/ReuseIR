@@ -44,6 +44,9 @@ public:
       : alignment(1), size(0, false), raw_fields{}, field_map{} {
     for (auto [index, type] : llvm::enumerate(fields)) {
       llvm::TypeSize typeSz = layout.getTypeSize(type);
+      // skip zero sized element
+      if (typeSz.isZero())
+        continue;
       size_t typeAlign = layout.getTypeABIAlignment(type);
       alignment = std::max(alignment, llvm::Align(typeAlign));
       llvm::TypeSize alignedSize = llvm::alignTo(size, typeAlign);
