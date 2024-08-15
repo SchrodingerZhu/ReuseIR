@@ -16,28 +16,6 @@
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
-inline void populateTypeConverter(mlir::LLVMTypeConverter &converter) {
-  converter.addConversion([](RcType type) -> Type {
-    return mlir::LLVM::LLVMPointerType::get(type.getContext());
-  });
-  converter.addConversion([](TokenType type) -> Type {
-    return mlir::LLVM::LLVMPointerType::get(type.getContext());
-  });
-  converter.addConversion([](MRefType type) -> Type {
-    return mlir::LLVM::LLVMPointerType::get(type.getContext());
-  });
-  converter.addConversion([](RegionCtxType type) -> Type {
-    return mlir::LLVM::LLVMPointerType::get(type.getContext());
-  });
-  converter.addConversion([&converter](
-                              CompositeType type) -> std::optional<Type> {
-    llvm::SmallVector<mlir::Type> fieldTypes;
-    if (mlir::failed(converter.convertTypes(type.getMemberTypes(), fieldTypes)))
-      return std::nullopt;
-    return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(),
-                                                  fieldTypes);
-  });
-  // TODO: Add more conversions here.
-}
+void populateLLVMTypeConverter(mlir::LLVMTypeConverter &converter);
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir

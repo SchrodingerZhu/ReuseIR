@@ -25,6 +25,33 @@
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
+
+void populateLLVMTypeConverter(mlir::LLVMTypeConverter &converter) {
+  converter.addConversion([](RcType type) -> Type {
+    return mlir::LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](TokenType type) -> Type {
+    return mlir::LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](MRefType type) -> Type {
+    return mlir::LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](RegionCtxType type) -> Type {
+    return mlir::LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([&converter](
+                              CompositeType type) -> std::optional<Type> {
+    llvm::SmallVector<mlir::Type> fieldTypes;
+    if (mlir::failed(converter.convertTypes(type.getMemberTypes(), fieldTypes)))
+      return std::nullopt;
+    return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(),
+                                                  fieldTypes);
+  });
+  converter.addConversion([](UnitType type) -> Type {
+    return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), {});
+  });
+} // namespace REUSE_IR_DECL_SCOPE
+
 #pragma push_macro("GENERATE_POINTER_ALIKE_LAYOUT")
 #define GENERATE_POINTER_ALIKE_LAYOUT(TYPE)                                    \
   ::llvm::TypeSize TYPE::getTypeSizeInBits(                                    \
