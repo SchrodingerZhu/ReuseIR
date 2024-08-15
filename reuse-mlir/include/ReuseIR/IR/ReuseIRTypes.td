@@ -259,11 +259,8 @@ def ReuseIR_ClosureType : ReuseIR_Type<"Closure", "closure",
       void* func;
       void* destructor;
       void* clone;
-      size_t expected;
-      size_t applied;
-      struct {
-        Args...;
-      };
+      void* arg_start;
+      void* arg_cursor;
     };
   }];
 

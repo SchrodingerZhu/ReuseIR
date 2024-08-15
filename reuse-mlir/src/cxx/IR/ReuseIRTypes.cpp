@@ -42,30 +42,17 @@ void populateLLVMTypeConverter(mlir::DataLayout layout,
   converter.addConversion([](RegionCtxType type) -> Type {
     return mlir::LLVM::LLVMPointerType::get(type.getContext());
   });
-  converter.addConversion([&converter](
-                              CompositeType type) -> std::optional<Type> {
-    llvm::SmallVector<mlir::Type> fieldTypes;
-    if (mlir::failed(converter.convertTypes(type.getMemberTypes(), fieldTypes)))
-      return std::nullopt;
-    return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(),
-                                                  fieldTypes);
+  converter.addConversion([&converter, layout](CompositeType type) -> Type {
+    CompositeLayout targetLayout{layout, type.getMemberTypes()};
+    return targetLayout.getLLVMType(converter);
   });
   converter.addConversion([](UnitType type) -> Type {
     return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), {});
   });
-  converter.addConversion([&converter](
-                              ClosureType type) -> std::optional<Type> {
-    auto convertedIndexType =
-        converter.convertType(mlir::IndexType::get(type.getContext()));
+  converter.addConversion([](ClosureType type) -> std::optional<Type> {
     auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
-    llvm::SmallVector<mlir::Type> inputTypes;
-    if (mlir::failed(converter.convertTypes(type.getInputTypes(), inputTypes)))
-      return std::nullopt;
-    auto inputPackTy =
-        mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), inputTypes);
-    return mlir::LLVM::LLVMStructType::getLiteral(
-        type.getContext(), {ptrTy, ptrTy, ptrTy, convertedIndexType,
-                            convertedIndexType, inputPackTy});
+    return LLVM::LLVMStructType::getLiteral(
+        type.getContext(), {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy});
   });
   converter.addConversion([&converter](ArrayType type) -> Type {
     auto eltTy = converter.convertType(type.getElementType());
@@ -74,13 +61,8 @@ void populateLLVMTypeConverter(mlir::DataLayout layout,
     return eltTy;
   });
   converter.addConversion([](OpaqueType type) -> Type {
-    auto alignment = type.getAlignment().getUInt();
-    auto size = type.getSize().getUInt();
-    auto cnt = size / alignment;
-    auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
-        mlir::IntegerType::get(type.getContext(), 8), alignment);
-    auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
-    return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), dataArea);
+    return mlir::LLVM::LLVMArrayType::get(
+        mlir::IntegerType::get(type.getContext(), 8), type.getSize().getUInt());
   });
 } // namespace REUSE_IR_DECL_SCOPE
 
