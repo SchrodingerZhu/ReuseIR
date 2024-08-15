@@ -16,6 +16,8 @@
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
-void populateLLVMTypeConverter(mlir::LLVMTypeConverter &converter);
+void populateLLVMTypeConverter(mlir::DataLayout layout,
+                               mlir::DataLayoutEntryListRef params,
+                               mlir::LLVMTypeConverter &converter);
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir

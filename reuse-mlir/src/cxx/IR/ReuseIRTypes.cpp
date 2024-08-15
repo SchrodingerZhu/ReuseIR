@@ -11,13 +11,14 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/Support/Alignment.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/TypeSize.h"
 #include <algorithm>
 #include <cstddef>
-#include <llvm-20/llvm/Support/MathExtras.h>
 #include <numeric>
 
 #define GET_TYPEDEF_CLASSES
@@ -26,7 +27,9 @@
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
 
-void populateLLVMTypeConverter(mlir::LLVMTypeConverter &converter) {
+void populateLLVMTypeConverter(mlir::DataLayout layout,
+                               mlir::DataLayoutEntryListRef params,
+                               mlir::LLVMTypeConverter &converter) {
   converter.addConversion([](RcType type) -> Type {
     return mlir::LLVM::LLVMPointerType::get(type.getContext());
   });
@@ -49,6 +52,35 @@ void populateLLVMTypeConverter(mlir::LLVMTypeConverter &converter) {
   });
   converter.addConversion([](UnitType type) -> Type {
     return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), {});
+  });
+  converter.addConversion([&converter](
+                              ClosureType type) -> std::optional<Type> {
+    auto convertedIndexType =
+        converter.convertType(mlir::IndexType::get(type.getContext()));
+    auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
+    llvm::SmallVector<mlir::Type> inputTypes;
+    if (mlir::failed(converter.convertTypes(type.getInputTypes(), inputTypes)))
+      return std::nullopt;
+    auto inputPackTy =
+        mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), inputTypes);
+    return mlir::LLVM::LLVMStructType::getLiteral(
+        type.getContext(), {ptrTy, ptrTy, ptrTy, convertedIndexType,
+                            convertedIndexType, inputPackTy});
+  });
+  converter.addConversion([&converter](ArrayType type) -> Type {
+    auto eltTy = converter.convertType(type.getElementType());
+    for (auto size : llvm::reverse(type.getSizes()))
+      eltTy = mlir::LLVM::LLVMArrayType::get(eltTy, size);
+    return eltTy;
+  });
+  converter.addConversion([](OpaqueType type) -> Type {
+    auto alignment = type.getAlignment().getUInt();
+    auto size = type.getSize().getUInt();
+    auto cnt = size / alignment;
+    auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
+        mlir::IntegerType::get(type.getContext(), 8), alignment);
+    auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
+    return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), dataArea);
   });
 } // namespace REUSE_IR_DECL_SCOPE
 
