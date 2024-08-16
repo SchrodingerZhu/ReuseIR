@@ -71,6 +71,7 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
           RcBox* root;
         } status;
         RcBox* next;
+        void* drop;
         T data;
     };
     ```
@@ -88,10 +89,9 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
         auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
         auto ptrEqSize = ::mlir::IntegerType::get(getContext(),
                                             layout.getTypeSizeInBits(ptrTy));
-        auto indexTy = ::mlir::IndexType::get(getContext());
         return (getFreezable() != ::mlir::BoolAttr() && getFreezable().getValue())
-            ? CompositeLayout{layout, {ptrEqSize, ptrTy, getDataType()}}
-            : CompositeLayout{layout, {indexTy, getDataType()}};
+            ? CompositeLayout{layout, {ptrEqSize, ptrTy, ptrTy, getDataType()}}
+            : CompositeLayout{layout, {ptrEqSize, getDataType()}};
     }
   }];
 }
