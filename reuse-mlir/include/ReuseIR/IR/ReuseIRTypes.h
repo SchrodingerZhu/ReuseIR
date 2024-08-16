@@ -115,7 +115,7 @@ inline void populateLLVMTypeConverter(mlir::DataLayout layout,
   converter.addConversion([](ClosureType type) -> Type {
     auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
     return LLVM::LLVMStructType::getLiteral(
-        type.getContext(), {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy});
+        type.getContext(), {ptrTy, ptrTy, ptrTy});
   });
   converter.addConversion([&converter](ArrayType type) -> Type {
     auto eltTy = converter.convertType(type.getElementType());

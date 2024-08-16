@@ -155,7 +155,7 @@ OpaqueType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
   auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
   auto ptrSize = dataLayout.getTypeSize(ptrTy);
-  return ptrSize * 5 * 8;
+  return ptrSize * 3 * 8;
 }
 
 uint64_t ClosureType::getABIAlignment(

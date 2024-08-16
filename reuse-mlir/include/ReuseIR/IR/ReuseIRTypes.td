@@ -71,9 +71,14 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
           RcBox* root;
         } status;
         RcBox* next;
-        void* drop;
+        void* vtable;
         T data;
     };
+    struct VTable {
+      void* drop;
+      size_t scan_count;
+      size_t scan_offset[0];
+    }
     ```
   }];
   let parameters = (ins
@@ -304,12 +309,15 @@ def ReuseIR_ClosureType : ReuseIR_Type<"Closure", "closure",
   let description = [{
     `reuse_ir.closure` is for capturing lambda expressions.
     struct Closure {
-      void* func;
-      void* destructor;
-      void* clone;
+      void* vtable;
       void* arg_start;
       void* arg_cursor;
     };
+    struct VTable {
+      void* func;
+      void* clone;
+      void* drop;
+    }
   }];
 
   let parameters = (ins
