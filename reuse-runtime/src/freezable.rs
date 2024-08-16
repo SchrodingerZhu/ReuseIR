@@ -1,3 +1,4 @@
+const STATUS_COUNTER_PADDING_BITS : usize = 2;
 #[repr(C)]
 pub struct RegionCtx {
     pub(crate) tail: *mut FreezableRcBoxHeader,
@@ -10,6 +11,7 @@ pub union FreezingStatus {
     scalar: usize,
 }
 
+#[derive(PartialEq, Eq)]
 pub enum StatusKind {
     Unmarked,
     Representative,
@@ -51,19 +53,19 @@ impl FreezingStatus {
     pub fn rank(value: usize) -> Self {
         let mask = isize::MIN as usize;
         Self {
-            scalar: mask | (value << 2) | 0b00,
+            scalar: mask | (value << STATUS_COUNTER_PADDING_BITS) | 0b00,
         }
     }
     pub fn rc(value: usize) -> Self {
         let mask = isize::MIN as usize;
         Self {
-            scalar: mask | (value << 2) | 0b01,
+            scalar: mask | (value << STATUS_COUNTER_PADDING_BITS) | 0b01,
         }
     }
     pub fn frozen_rc(value: usize) -> Self {
         let mask = isize::MIN as usize;
         Self {
-            scalar: mask | (value << 2) | 0b010,
+            scalar: mask | (value << STATUS_COUNTER_PADDING_BITS) | 0b10,
         }
     }
     pub fn disposing() -> Self {
@@ -88,16 +90,26 @@ pub struct FreezableRcBoxHeader {
     vtable: *const FreezableVTable,
 }
 
-unsafe fn find_representative(object: *mut FreezableRcBoxHeader) -> *mut FreezableRcBoxHeader {
-    let status = (*object).status;
-    match status.get_kind() {
-        StatusKind::Representative => {
-            let parent = find_representative(status.get_pointer());
-            (*object).status = FreezingStatus::representative(parent);
-            parent
-        }
-        _ => object,
+unsafe fn increase_refcnt(object: *mut FreezableRcBoxHeader, count: usize) {
+    (*object).status.scalar += count << STATUS_COUNTER_PADDING_BITS; 
+}
+
+unsafe fn decrease_refcnt(object: *mut FreezableRcBoxHeader, count: usize) -> bool {
+    (*object).status.scalar -= count << STATUS_COUNTER_PADDING_BITS; 
+    (*object).status.scalar as isize > 0
+}
+
+unsafe fn find_representative(mut object: *mut FreezableRcBoxHeader) -> *mut FreezableRcBoxHeader {
+    let mut root = object;
+    while (*root).status.get_kind() == StatusKind::Representative {
+        root = (*root).status.get_pointer();
     }
+    while (*object).status.get_kind() == StatusKind::Representative {
+        let next = (*object).status.get_pointer();
+        (*object).status = FreezingStatus::representative(root);
+        object = next;
+    }
+    root
 }
 
 unsafe fn union(x: *mut FreezableRcBoxHeader, y: *mut FreezableRcBoxHeader) {
@@ -126,8 +138,9 @@ pub unsafe extern "C" fn __reuse_ir_freeze_atomic(object: *mut FreezableRcBoxHea
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __reuse_ir_acquire_freezable(object: *mut FreezableRcBoxHeader) {
-    unimplemented!("cannot acquire {object:?}")
+pub unsafe extern "C" fn __reuse_ir_acquire_freezable(object: *mut FreezableRcBoxHeader, count: usize) {
+    let root = find_representative(object);
+    increase_refcnt(root, count);
 }
 
 #[no_mangle]
