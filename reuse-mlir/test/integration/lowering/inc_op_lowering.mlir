@@ -18,7 +18,7 @@ func.func @bar(%arg0: !reuse_ir.rc<i64, atomic: true>) {
 }
 func.func @baz(%arg0: !reuse_ir.rc<i64, frozen: true>) {
     // CHECK: %[[REG0:[a-z0-9]+]] = llvm.mlir.constant(1 : i64) : i64
-    // CHECK: call @__reuse_ir_acquire_freezable(%{{[a-z0-9]+}}, %[[REG0]]) : (!llvm.ptr, i64) -> ()
+    // CHECK: llvm.call @__reuse_ir_acquire_freezable(%{{[a-z0-9]+}}, %[[REG0]]) : (!llvm.ptr, i64) -> ()
     reuse_ir.inc(%arg0 : <i64, frozen: true>, 1)
     return
 }

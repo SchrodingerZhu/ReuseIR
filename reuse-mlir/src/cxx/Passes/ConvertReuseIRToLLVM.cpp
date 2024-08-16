@@ -1,6 +1,8 @@
 #include "ReuseIR/IR/ReuseIROps.h"
 #include "ReuseIR/IR/ReuseIRTypes.h"
 #include "ReuseIR/Passes.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -8,6 +10,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <memory>
@@ -17,13 +20,32 @@ namespace mlir {
 
 namespace REUSE_IR_DECL_SCOPE {
 
+class AllocOpLowering : public mlir::OpConversionPattern<AllocOp> {
+public:
+  using OpConversionPattern<AllocOp>::OpConversionPattern;
+  mlir::LogicalResult matchAndRewrite(
+      AllocOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    TokenType tokenTy = op.getToken().getType();
+    const auto *cvt = static_cast<const LLVMTypeConverter *>(typeConverter);
+    auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+        op.getLoc(), cvt->getIndexType(), tokenTy.getSize());
+    auto alignment = rewriter.create<mlir::LLVM::ConstantOp>(
+        op.getLoc(), cvt->getIndexType(), tokenTy.getAlignment());
+    rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
+        op, "__reuse_ir_alloc", mlir::LLVM::LLVMPointerType::get(getContext()),
+        mlir::ValueRange{size, alignment});
+    return mlir::success();
+  }
+};
+
 class IncOpLowering : public mlir::OpConversionPattern<IncOp> {
 public:
   using OpConversionPattern<IncOp>::OpConversionPattern;
 
-  mlir::LogicalResult
-  matchAndRewrite(IncOp op, OpAdaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
+  mlir::LogicalResult matchAndRewrite(
+      IncOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
     RcType rcPtrTy = op.getRcPtr().getType();
     mlir::reuse_ir::RcBoxType rcBoxTy = RcBoxType::get(
         getContext(), rcPtrTy.getPointee(), rcPtrTy.getAtomic(),
@@ -40,7 +62,8 @@ public:
               ? "__reuse_ir_acquire_atomic_freezable"
               : "__reuse_ir_acquire_freezable";
       rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
-          op, func, mlir::ValueRange{}, mlir::ValueRange{adaptor.getRcPtr(), amount});
+          op, func, mlir::ValueRange{},
+          mlir::ValueRange{adaptor.getRcPtr(), amount});
     } else {
       auto rcField = rewriter.create<mlir::LLVM::GEPOp>(
           op.getLoc(), mlir::LLVM::LLVMPointerType::get(getContext()),
@@ -71,17 +94,27 @@ struct ConvertReuseIRToLLVMPass
 static void emitRuntimeFunctions(mlir::Location loc,
                                  mlir::IntegerType targetIdxTy,
                                  mlir::OpBuilder &builder) {
+  auto ptrTy = mlir::LLVM::LLVMPointerType::get(builder.getContext());
   builder.create<mlir::func::FuncOp>(
       loc, builder.getStringAttr("__reuse_ir_acquire_freezable"),
-      builder.getFunctionType(
-          {mlir::LLVM::LLVMPointerType::get(builder.getContext()), targetIdxTy},
-          {}),
+      builder.getFunctionType({ptrTy, targetIdxTy}, {}),
       builder.getStringAttr("private"), nullptr, nullptr);
   builder.create<mlir::func::FuncOp>(
       loc, builder.getStringAttr("__reuse_ir_acquire_atomic_freezable"),
-      builder.getFunctionType(
-          {mlir::LLVM::LLVMPointerType::get(builder.getContext()), targetIdxTy},
-          {}),
+      builder.getFunctionType({ptrTy, targetIdxTy}, {}),
+      builder.getStringAttr("private"), nullptr, nullptr);
+  builder.create<mlir::func::FuncOp>(
+      loc, builder.getStringAttr("__reuse_ir_alloc"),
+      builder.getFunctionType({targetIdxTy, targetIdxTy}, {ptrTy}),
+      builder.getStringAttr("private"), nullptr, nullptr);
+  builder.create<mlir::func::FuncOp>(
+      loc, builder.getStringAttr("__reuse_ir_dealloc"),
+      builder.getFunctionType({ptrTy, targetIdxTy, targetIdxTy}, {}),
+      builder.getStringAttr("private"), nullptr, nullptr);
+  builder.create<mlir::func::FuncOp>(
+      loc, builder.getStringAttr("__reuse_ir_realloc"),
+      builder.getFunctionType({ptrTy, targetIdxTy, targetIdxTy, targetIdxTy},
+                              {ptrTy}),
       builder.getStringAttr("private"), nullptr, nullptr);
 }
 
@@ -98,9 +131,10 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   mlir::LLVMTypeConverter converter(&getContext());
   populateLLVMTypeConverter(dataLayout, converter);
   mlir::RewritePatternSet patterns(&getContext());
-  patterns.add<IncOpLowering>(converter, &getContext());
+  mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
+  patterns.add<IncOpLowering, AllocOpLowering>(converter, &getContext());
   mlir::ConversionTarget target(getContext());
-  target.addLegalDialect<mlir::LLVM::LLVMDialect, mlir::func::FuncDialect>();
+  target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalOp<mlir::ModuleOp>();
   target.addIllegalDialect<mlir::reuse_ir::ReuseIRDialect>();
   llvm::SmallVector<mlir::Operation *> ops;
