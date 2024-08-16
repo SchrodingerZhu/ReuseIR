@@ -111,7 +111,7 @@ def ReuseIR_RcType : ReuseIR_Type<"Rc", "rc",
   );
 
   let assemblyFormat = [{
-    `<` $pointee (`,` `atomic` `:` $atomic^ )? (`,` `frozen` `:` $frozen^ )? `>`
+    `<` $pointee  (`,` `frozen` `:` $frozen^ )? (`,` `atomic` `:` $atomic^ )? `>`
   }];
 }
 

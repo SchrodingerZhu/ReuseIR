@@ -11,9 +11,9 @@ llvm::LogicalResult IncOp::verify() {
   if (auto attr = rcPtrTy.getFrozen())
     if (!attr.getValue())
       return emitOpError(
-          "Cannot increase a non-frozen but freezable RC pointer");
+          "cannot increase a non-frozen but freezable RC pointer");
   if (getCount() && *getCount() == 0)
-    return emitError("The amount of increment must be non-zero");
+    return emitError("the amount of increment must be non-zero");
   return llvm::success();
 }
 } // namespace REUSE_IR_DECL_SCOPE

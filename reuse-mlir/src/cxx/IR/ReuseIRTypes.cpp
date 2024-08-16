@@ -267,11 +267,11 @@ uint64_t CompositeType::getPreferredAlignment(
 TokenType::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
                   size_t alignment, size_t size) {
   if (!llvm::isPowerOf2_64(alignment))
-    return emitError() << "Alignment must be a power of 2";
+    return emitError() << "alignment must be a power of 2";
   if (size == 0)
-    return emitError() << "Size must be non-zero";
+    return emitError() << "size must be non-zero";
   if (size % alignment != 0)
-    return emitError() << "Size must be a multiple of alignment";
+    return emitError() << "size must be a multiple of alignment";
   return ::llvm::success();
 }
 
