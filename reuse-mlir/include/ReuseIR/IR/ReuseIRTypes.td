@@ -89,9 +89,9 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
         auto ptrEqSize = ::mlir::IntegerType::get(getContext(),
                                             layout.getTypeSizeInBits(ptrTy));
         auto indexTy = ::mlir::IndexType::get(getContext());
-        return getFreezable()
-            ? CompositeLayout{layout, {indexTy, getDataType()}}
-            : CompositeLayout{layout, {ptrEqSize, ptrTy, getDataType()}};
+        return (getFreezable() != ::mlir::BoolAttr() && getFreezable().getValue())
+            ? CompositeLayout{layout, {ptrEqSize, ptrTy, getDataType()}}
+            : CompositeLayout{layout, {indexTy, getDataType()}};
     }
   }];
 }
@@ -109,7 +109,7 @@ def ReuseIR_RcType : ReuseIR_Type<"Rc", "rc",
     OptionalParameter<"mlir::BoolAttr">:$atomic,
     OptionalParameter<"mlir::BoolAttr">:$frozen
   );
-  
+
   let hasCustomAssemblyFormat = 1;
 }
 

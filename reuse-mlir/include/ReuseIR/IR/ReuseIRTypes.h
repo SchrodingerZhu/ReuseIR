@@ -70,10 +70,11 @@ public:
         std::back_inserter(convertedTypes),
         [&](const FieldKind &kind) -> mlir::Type {
           return std::visit(
-              [&](const auto &variant) -> mlir::Type {
-                if constexpr (std::is_same_v<decltype(variant), mlir::Type>)
+              [&](auto &&variant) -> mlir::Type {
+                using T = std::decay_t<decltype(variant)>;
+                if constexpr (std::is_same_v<T, mlir::Type>)
                   return converter.convertType(variant);
-                if constexpr (std::is_same_v<decltype(variant), size_t>)
+                if constexpr (std::is_same_v<T, size_t>)
                   return mlir::LLVM::LLVMArrayType::get(
                       mlir::IntegerType::get(&converter.getContext(), 8),
                       variant);

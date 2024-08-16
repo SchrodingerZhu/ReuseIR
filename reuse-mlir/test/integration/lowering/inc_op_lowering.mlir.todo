@@ -1,6 +1,0 @@
-module @test {
-func.func @foo(%arg0: !reuse_ir.rc<i64>) {
-    reuse_ir.inc(%arg0 : <i64>, 1)
-    return
-}
-}

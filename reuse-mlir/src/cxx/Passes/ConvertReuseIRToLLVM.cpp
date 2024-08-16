@@ -4,11 +4,11 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <llvm-20/llvm/Support/raw_ostream.h>
 #include <memory>
 
 namespace mlir {
@@ -32,7 +32,23 @@ public:
     auto rcField = rewriter.create<mlir::LLVM::GEPOp>(
         op.getLoc(), mlir::LLVM::LLVMPointerType::get(getContext()), boxStruct,
         adaptor.getRcPtr(), mlir::LLVM::GEPArg{0});
-    rewriter.eraseOp(op);
+    auto rcTy = boxStruct.getBody()[0];
+    if (rcPtrTy.getAtomic() != mlir::BoolAttr() &&
+        rcPtrTy.getAtomic().getValue())
+      rewriter.replaceOpWithNewOp<mlir::LLVM::AtomicRMWOp>(
+          op, mlir::LLVM::AtomicBinOp::add, rcField,
+          rewriter.create<mlir::LLVM::ConstantOp>(
+              op.getLoc(), rcTy, adaptor.getCount() ? *adaptor.getCount() : 1),
+          mlir::LLVM::AtomicOrdering::seq_cst);
+    else {
+      auto rcVal =
+          rewriter.create<mlir::LLVM::LoadOp>(op.getLoc(), rcTy, rcField);
+      auto newRcVal = rewriter.create<mlir::LLVM::AddOp>(
+          op.getLoc(), rcTy, rcVal,
+          rewriter.create<mlir::LLVM::ConstantOp>(
+              op.getLoc(), rcTy, adaptor.getCount() ? *adaptor.getCount() : 1));
+      rewriter.replaceOpWithNewOp<mlir::LLVM::StoreOp>(op, newRcVal, rcField);
+    }
     return mlir::success();
   }
 };
