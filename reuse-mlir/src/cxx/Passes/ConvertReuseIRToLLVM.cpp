@@ -34,27 +34,22 @@ public:
         op.getLoc(), mlir::LLVM::LLVMPointerType::get(getContext()), boxStruct,
         adaptor.getRcPtr(), mlir::LLVM::GEPArg{0});
     auto rcTy = boxStruct.getBody()[0];
+    auto value = adaptor.getCount() ? *adaptor.getCount() : 1;
+    if (rcPtrTy.getFrozen())
+      value <<= 2;
     if (rcPtrTy.getAtomic() && rcPtrTy.getAtomic().getValue()) {
-      auto binOp = rcPtrTy.getFrozen() ? mlir::LLVM::AtomicBinOp::sub
-                                       : mlir::LLVM::AtomicBinOp::add;
       rewriter.replaceOpWithNewOp<mlir::LLVM::AtomicRMWOp>(
-          op, binOp, rcField,
-          rewriter.create<mlir::LLVM::ConstantOp>(
-              op.getLoc(), rcTy, adaptor.getCount() ? *adaptor.getCount() : 1),
+          op, mlir::LLVM::AtomicBinOp::add, rcField,
+          rewriter.create<mlir::LLVM::ConstantOp>(op.getLoc(), rcTy, value),
           mlir::LLVM::AtomicOrdering::seq_cst);
     } else {
       auto rcVal =
           rewriter.create<mlir::LLVM::LoadOp>(op.getLoc(), rcTy, rcField);
-      auto amount = rewriter.create<mlir::LLVM::ConstantOp>(
-          op.getLoc(), rcTy, adaptor.getCount() ? *adaptor.getCount() : 1);
+      auto amount =
+          rewriter.create<mlir::LLVM::ConstantOp>(op.getLoc(), rcTy, value);
       auto newRcVal =
-          rcPtrTy.getFrozen()
-              ? rewriter
-                    .create<mlir::LLVM::SubOp>(op.getLoc(), rcTy, rcVal, amount)
-                    .getRes()
-              : rewriter
-                    .create<mlir::LLVM::AddOp>(op.getLoc(), rcTy, rcVal, amount)
-                    .getRes();
+          rewriter.create<mlir::LLVM::AddOp>(op.getLoc(), rcTy, rcVal, amount)
+              .getRes();
       rewriter.replaceOpWithNewOp<mlir::LLVM::StoreOp>(op, newRcVal, rcField);
     }
     return mlir::success();

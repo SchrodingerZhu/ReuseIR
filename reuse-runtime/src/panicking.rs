@@ -1,0 +1,5 @@
+#[no_mangle]
+pub unsafe extern "C" fn __reuse_ir_panic(ptr : *const u8, length: usize) -> ! {
+    let message = std::slice::from_raw_parts(ptr, length);
+    panic!("{}", std::str::from_utf8_unchecked(message))
+}
