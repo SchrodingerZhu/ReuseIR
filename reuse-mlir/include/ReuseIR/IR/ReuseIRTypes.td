@@ -190,6 +190,14 @@ def ReuseIR_VectorType : ReuseIR_Type<"Vector", "vector",
   let assemblyFormat = [{
     `<` $elementType `>`
   }];
+
+  let extraClassDeclaration = [{
+  ::mlir::reuse_ir::CompositeLayout getCompositeLayout(::mlir::DataLayout layout) const {
+    auto idxTy = ::mlir::IndexType::get(getContext());
+    auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
+    return {layout, {ptrTy, idxTy, idxTy}};
+  }
+  }];
 }
 
 def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",

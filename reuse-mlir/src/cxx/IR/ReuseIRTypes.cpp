@@ -77,10 +77,7 @@ void populateLLVMTypeConverter(mlir::DataLayout layout,
     return unionLayout.getLLVMType(converter);
   });
   converter.addConversion([&converter, layout](VectorType type) -> Type {
-    auto idxTy = converter.getIndexType();
-    auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
-    CompositeLayout targetLayout{layout, {ptrTy, idxTy, idxTy}};
-    return targetLayout.getLLVMType(converter);
+    return type.getCompositeLayout(layout).getLLVMType(converter);
   });
   converter.addConversion([&converter, layout](RcBoxType type) -> Type {
     return type.getCompositeLayout(layout).getLLVMType(converter);
@@ -206,28 +203,19 @@ ArrayType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
 ::llvm::TypeSize VectorType::getTypeSizeInBits(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
-  auto idxTy = mlir::IndexType::get(getContext());
-  llvm::TypeSize size = dataLayout.getTypeSize(ptrTy);
-  llvm::TypeSize idxSize = dataLayout.getTypeSize(idxTy);
-  llvm::Align idxAlign{dataLayout.getTypeABIAlignment(idxTy)};
-  size = llvm::TypeSize::getFixed(llvm::alignTo(size, idxAlign));
-  size += idxSize * 2;
-  size = llvm::TypeSize::getFixed(
-      llvm::alignTo(size, getABIAlignment(dataLayout, params)));
-  return size * 8;
+  return getCompositeLayout(dataLayout).getSize() * 8;
 }
 
 uint64_t VectorType::getABIAlignment(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return maxABIAlignmentOfPtrAndIndex(dataLayout, getContext());
+  return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
 uint64_t
 VectorType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
                                   ::mlir::DataLayoutEntryListRef params) const {
-  return maxPreferredAlignmentOfPtrAndIndex(dataLayout, getContext());
+  return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
 // Opaque DataLayoutInterface:
