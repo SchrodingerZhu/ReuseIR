@@ -6,13 +6,15 @@ add_mlir_tool(reuse-opt
   DEPENDS
     MLIROptLib
     MLIRReuseIR
+    MLIRReuseIRPasses
     ${dialect_libs}
     ${conversion_libs}
     ${extension_libs}
 )
 target_link_libraries(reuse-opt 
   PRIVATE 
-    MLIRReuseIR 
+    MLIRReuseIR
+    MLIRReuseIRPasses 
     ${dialect_libs} 
     ${conversion_libs} 
     ${extension_libs} 

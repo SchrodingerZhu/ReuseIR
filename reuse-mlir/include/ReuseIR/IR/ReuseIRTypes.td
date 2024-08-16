@@ -109,10 +109,8 @@ def ReuseIR_RcType : ReuseIR_Type<"Rc", "rc",
     OptionalParameter<"mlir::BoolAttr">:$atomic,
     OptionalParameter<"mlir::BoolAttr">:$frozen
   );
-
-  let assemblyFormat = [{
-    `<` $pointee  (`,` `frozen` `:` $frozen^ )? (`,` `atomic` `:` $atomic^ )? `>`
-  }];
+  
+  let hasCustomAssemblyFormat = 1;
 }
 
 def ReuseIR_MRefType : ReuseIR_Type<"MRef", "mref",

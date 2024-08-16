@@ -12,6 +12,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
+#include "mlir/Support/LLVM.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/IR/DataLayout.h"
@@ -275,6 +276,98 @@ TokenType::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
   return ::llvm::success();
 }
 
+// RcType Parser and Printer:
+::mlir::Type RcType::parse(::mlir::AsmParser &odsParser) {
+  ::mlir::Builder odsBuilder(odsParser.getContext());
+  ::llvm::SMLoc odsLoc = odsParser.getCurrentLocation();
+  (void)odsLoc;
+  ::mlir::FailureOr<mlir::Type> _result_pointee;
+  ::mlir::FailureOr<mlir::BoolAttr> _result_atomic;
+  ::mlir::FailureOr<mlir::BoolAttr> _result_frozen;
+  // Parse literal '<'
+  if (odsParser.parseLess())
+    return {};
+
+  // Parse variable 'pointee'
+  _result_pointee = ::mlir::FieldParser<mlir::Type>::parse(odsParser);
+  if (::mlir::failed(_result_pointee)) {
+    odsParser.emitError(odsParser.getCurrentLocation(),
+                        "failed to parse ReuseIR_RcType parameter 'pointee' "
+                        "which is to be a `mlir::Type`");
+    return {};
+  }
+  while (mlir::succeeded(odsParser.parseOptionalComma())) {
+    // Parse literal ','
+
+    // Parse literal 'frozen'
+    if (mlir::succeeded(odsParser.parseOptionalKeyword("frozen"))) {
+      // Parse literal ':'
+      if (odsParser.parseColon())
+        return {};
+
+      // Parse variable 'frozen'
+      _result_frozen = ::mlir::FieldParser<mlir::BoolAttr>::parse(odsParser);
+      if (::mlir::failed(_result_frozen)) {
+        odsParser.emitError(odsParser.getCurrentLocation(),
+                            "failed to parse ReuseIR_RcType parameter 'frozen' "
+                            "which is to be a `mlir::BoolAttr`");
+        return {};
+      }
+      continue;
+    }
+
+    // Parse literal 'atomic'
+    if (mlir::succeeded(odsParser.parseOptionalKeyword("atomic"))) {
+      // Parse literal ':'
+      if (odsParser.parseColon())
+        return {};
+
+      // Parse variable 'atomic'
+      _result_atomic = ::mlir::FieldParser<mlir::BoolAttr>::parse(odsParser);
+      if (::mlir::failed(_result_atomic)) {
+        odsParser.emitError(odsParser.getCurrentLocation(),
+                            "failed to parse ReuseIR_RcType parameter 'atomic' "
+                            "which is to be a `mlir::BoolAttr`");
+        return {};
+      }
+      continue;
+    }
+    break;
+  }
+  // Parse literal '>'
+  if (odsParser.parseGreater())
+    return {};
+  assert(::mlir::succeeded(_result_pointee));
+  return RcType::get(
+      odsParser.getContext(), mlir::Type((*_result_pointee)),
+      mlir::BoolAttr((_result_atomic.value_or(mlir::BoolAttr()))),
+      mlir::BoolAttr((_result_frozen.value_or(mlir::BoolAttr()))));
+}
+
+void RcType::print(::mlir::AsmPrinter &odsPrinter) const {
+  ::mlir::Builder odsBuilder(getContext());
+  odsPrinter << "<";
+  odsPrinter.printStrippedAttrOrType(getPointee());
+  if (!(getFrozen() == mlir::BoolAttr())) {
+    odsPrinter << ",";
+    odsPrinter << ' ' << "frozen";
+    odsPrinter << ' ' << ":";
+    if (!(getFrozen() == mlir::BoolAttr())) {
+      odsPrinter << ' ';
+      odsPrinter.printStrippedAttrOrType(getFrozen());
+    }
+  }
+  if (!(getAtomic() == mlir::BoolAttr())) {
+    odsPrinter << ",";
+    odsPrinter << ' ' << "atomic";
+    odsPrinter << ' ' << ":";
+    if (!(getAtomic() == mlir::BoolAttr())) {
+      odsPrinter << ' ';
+      odsPrinter.printStrippedAttrOrType(getAtomic());
+    }
+  }
+  odsPrinter << ">";
+}
 void ReuseIRDialect::registerTypes() {
   (void)generatedTypePrinter;
   (void)generatedTypeParser;

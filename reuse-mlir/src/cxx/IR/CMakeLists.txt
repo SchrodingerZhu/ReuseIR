@@ -10,6 +10,5 @@ add_mlir_dialect_library(MLIRReuseIR
   LINK_COMPONENTS
     Core
   LINK_LIBS PUBLIC
-    cxx-rs
     ${dialect_libs}
 )

@@ -1,13 +1,9 @@
 #include "ReuseIR/IR/ReuseIRDialect.h"
 #include "ReuseIR/Common.h"
 #include "ReuseIR/IR/ReuseIROps.h"
-
-#include "cxx-rs/cxx.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/BuiltinDialect.h"
-
-#include "ReuseIR/IR/ReuseIROpsDialect.cpp.inc"
 #include "llvm/Support/ErrorHandling.h"
 
 namespace mlir {
@@ -28,3 +24,5 @@ ReuseIRDialect::materializeConstant(::mlir::OpBuilder &builder,
 }
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
+
+#include "ReuseIR/IR/ReuseIROpsDialect.cpp.inc"
