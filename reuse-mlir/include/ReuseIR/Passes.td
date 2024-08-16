@@ -3,7 +3,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ConvertReuseIRToLLVM : Pass<"convert-reuse-ir-to-llvm"> {
+def ConvertReuseIRToLLVM : Pass<"convert-reuse-ir-to-llvm", "::mlir::ModuleOp"> {
   let summary = "Convert Low-level ReuseIR Operations to LLVM IR";
   let description = [{
     This pass is serves as the last step in the ReuseIR pipeline. It converts

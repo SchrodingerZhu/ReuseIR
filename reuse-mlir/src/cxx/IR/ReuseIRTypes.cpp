@@ -28,59 +28,6 @@
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
-
-void populateLLVMTypeConverter(mlir::DataLayout layout,
-                               mlir::LLVMTypeConverter &converter) {
-  converter.addConversion([](RcType type) -> Type {
-    return mlir::LLVM::LLVMPointerType::get(type.getContext());
-  });
-  converter.addConversion([](TokenType type) -> Type {
-    return mlir::LLVM::LLVMPointerType::get(type.getContext());
-  });
-  converter.addConversion([](MRefType type) -> Type {
-    return mlir::LLVM::LLVMPointerType::get(type.getContext());
-  });
-  converter.addConversion([](RegionCtxType type) -> Type {
-    return mlir::LLVM::LLVMPointerType::get(type.getContext());
-  });
-  converter.addConversion([&converter, layout](CompositeType type) -> Type {
-    CompositeLayout targetLayout{layout, type.getMemberTypes()};
-    return targetLayout.getLLVMType(converter);
-  });
-  converter.addConversion([](ClosureType type) -> Type {
-    auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
-    return LLVM::LLVMStructType::getLiteral(
-        type.getContext(), {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy});
-  });
-  converter.addConversion([&converter](ArrayType type) -> Type {
-    auto eltTy = converter.convertType(type.getElementType());
-    for (auto size : llvm::reverse(type.getSizes()))
-      eltTy = mlir::LLVM::LLVMArrayType::get(eltTy, size);
-    return eltTy;
-  });
-  converter.addConversion([](OpaqueType type) -> Type {
-    auto alignment = type.getAlignment().getUInt();
-    auto size = type.getSize().getUInt();
-    auto cnt = size / alignment;
-    auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
-        mlir::IntegerType::get(type.getContext(), 8), alignment);
-    auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
-    return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), dataArea);
-  });
-  converter.addConversion([&converter, layout](UnionType type) -> Type {
-    return type.getCompositeLayout(layout).getLLVMType(converter);
-  });
-  converter.addConversion([&converter, layout](VectorType type) -> Type {
-    return type.getCompositeLayout(layout).getLLVMType(converter);
-  });
-  converter.addConversion([&converter, layout](RcBoxType type) -> Type {
-    return type.getCompositeLayout(layout).getLLVMType(converter);
-  });
-  converter.addConversion([&converter, layout](RefType type) -> Type {
-    return type.getCompositeLayout(layout).getLLVMType(converter);
-  });
-} // namespace REUSE_IR_DECL_SCOPE
-
 #pragma push_macro("GENERATE_POINTER_ALIKE_LAYOUT")
 #define GENERATE_POINTER_ALIKE_LAYOUT(TYPE)                                    \
   ::llvm::TypeSize TYPE::getTypeSizeInBits(                                    \
