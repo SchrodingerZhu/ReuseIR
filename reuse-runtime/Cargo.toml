@@ -7,3 +7,5 @@ edition = "2021"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
+smallvec = "1.13.2"
+stacker = "0.1.15"

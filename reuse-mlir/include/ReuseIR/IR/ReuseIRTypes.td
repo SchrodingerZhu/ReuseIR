@@ -75,7 +75,9 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
         T data;
     };
     struct VTable {
-      void* drop;
+      void*  drop;
+      size_t size;
+      size_t alignment;
       size_t scan_count;
       size_t scan_offset[0];
     }
