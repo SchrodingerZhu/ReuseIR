@@ -39,6 +39,25 @@ public:
   }
 };
 
+class FreeOpLowering : public mlir::OpConversionPattern<FreeOp> {
+public:
+  using OpConversionPattern<FreeOp>::OpConversionPattern;
+  mlir::LogicalResult matchAndRewrite(
+      FreeOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    TokenType tokenTy = op.getToken().getType();
+    const auto *cvt = static_cast<const LLVMTypeConverter *>(typeConverter);
+    auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+        op.getLoc(), cvt->getIndexType(), tokenTy.getSize());
+    auto alignment = rewriter.create<mlir::LLVM::ConstantOp>(
+        op.getLoc(), cvt->getIndexType(), tokenTy.getAlignment());
+    rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
+        op, "__reuse_ir_dealloc", mlir::ValueRange{},
+        mlir::ValueRange{adaptor.getToken(), size, alignment});
+    return mlir::success();
+  }
+};
+
 class IncOpLowering : public mlir::OpConversionPattern<IncOp> {
 public:
   using OpConversionPattern<IncOp>::OpConversionPattern;
@@ -132,7 +151,8 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   populateLLVMTypeConverter(dataLayout, converter);
   mlir::RewritePatternSet patterns(&getContext());
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
-  patterns.add<IncOpLowering, AllocOpLowering>(converter, &getContext());
+  patterns.add<IncOpLowering, AllocOpLowering, FreeOpLowering>(converter,
+                                                               &getContext());
   mlir::ConversionTarget target(getContext());
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalOp<mlir::ModuleOp>();
