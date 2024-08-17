@@ -7,3 +7,4 @@ function(add_mlir_type_interface interface)
 endfunction()
 
 add_mlir_type_interface(ReuseIRMangleInterface)
+add_mlir_type_interface(ReuseIRCompositeLayoutInterface)

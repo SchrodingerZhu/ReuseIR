@@ -5,6 +5,7 @@ include "mlir/Interfaces/DataLayoutInterfaces.td"
 include "mlir/IR/BuiltinTypes.td"
 include "ReuseIR/IR/ReuseIRDialect.td"
 include "ReuseIR/Interfaces/ReuseIRMangleInterface.td"
+include "ReuseIR/Interfaces/ReuseIRCompositeLayoutInterface.td"
 
 class ReuseIR_Type<string name, string typeMnemonic, list<Trait> traits = [],
                string baseCppClass = "::mlir::Type">
@@ -46,7 +47,7 @@ def ReuseIR_RegionCtxType : ReuseIR_Type<"RegionCtx", "region_ctx",
 }
 
 def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
   let summary = "ReuseIR Control Box";
   let description = [{
     `reuse_ir.rcbox` is the underlying control box of RC managed objects.
@@ -92,16 +93,6 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
   let assemblyFormat = [{
     `<` $dataType (`,` `atomic` `:` $atomic^ )? (`,` `freezable` `:` $freezable^ )? `>`
   }];
-  let extraClassDeclaration = [{
-    ::mlir::reuse_ir::CompositeLayout getCompositeLayout(::mlir::DataLayout layout) const {
-        auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
-        auto ptrEqSize = ::mlir::IntegerType::get(getContext(),
-                                            layout.getTypeSizeInBits(ptrTy));
-        return (getFreezable() != ::mlir::BoolAttr() && getFreezable().getValue())
-            ? CompositeLayout{layout, {ptrEqSize, ptrTy, ptrTy, getDataType()}}
-            : CompositeLayout{layout, {ptrEqSize, getDataType()}};
-    }
-  }];
 }
 
 def ReuseIR_RcType : ReuseIR_Type<"Rc", "rc",
@@ -140,7 +131,7 @@ def ReuseIR_MRefType : ReuseIR_Type<"MRef", "mref",
 }
 
 def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
 
   let summary = "ReuseIR Reference Type";
   let description = [{
@@ -155,20 +146,6 @@ def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
 
   let assemblyFormat = [{
     `<` $pointee ( `,` `rank` `:` $rank^ `,` `strided` `:` $strided  )? `>`
-  }];
-
-  let extraClassDeclaration = [{
-  ::mlir::reuse_ir::CompositeLayout getCompositeLayout(::mlir::DataLayout layout) const {
-    auto idxTy = ::mlir::IndexType::get(getContext());
-    auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
-    llvm::SmallVector<::mlir::Type> types {ptrTy};
-    if (getRank() != 0) {
-      types.resize(types.size() + getRank(), idxTy);
-      if (getStrided().getValue()) 
-        types.resize(types.size() + getRank(), idxTy);
-    }
-    return {layout, types};
-  }
   }];
 }
 
@@ -191,7 +168,7 @@ def ReuseIR_ArrayType : ReuseIR_Type<"Array", "array",
 }
 
 def ReuseIR_VectorType : ReuseIR_Type<"Vector", "vector",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
 
   let summary = "ReuseIR Vector Type";
   let description = [{
@@ -210,18 +187,10 @@ def ReuseIR_VectorType : ReuseIR_Type<"Vector", "vector",
   let assemblyFormat = [{
     `<` $elementType `>`
   }];
-
-  let extraClassDeclaration = [{
-  ::mlir::reuse_ir::CompositeLayout getCompositeLayout(::mlir::DataLayout layout) const {
-    auto idxTy = ::mlir::IndexType::get(getContext());
-    auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
-    return {layout, {ptrTy, idxTy, idxTy}};
-  }
-  }];
 }
 
 def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
 
   let summary = "ReuseIR Opaque Type";
   let description = [{
@@ -241,21 +210,10 @@ def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
   let assemblyFormat = [{
     `<` $size `,` $alignment `>`
   }];
-  let extraClassDeclaration = [{
-  ::mlir::reuse_ir::CompositeLayout getCompositeLayout(::mlir::DataLayout layout) const {
-    auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
-    auto size = getSize().getUInt();
-    auto align = getAlignment().getUInt();
-    auto dataTy = ::mlir::LLVM::LLVMFixedVectorType::get(
-        ::mlir::IntegerType::get(getContext(), 8), align);
-    auto dataArea = ::mlir::LLVM::LLVMArrayType::get(dataTy, size / align);
-    return {layout, {ptrTy, ptrTy, dataArea}};
-  }
-  }];
 }
 
 def ReuseIR_CompositeType : ReuseIR_Type<"Composite", "composite",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
 
   let summary = "ReuseIR Composite Type";
   let description = [{
@@ -275,7 +233,7 @@ def ReuseIR_CompositeType : ReuseIR_Type<"Composite", "composite",
 }
 
 def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
   let summary = "ReuseIR Union Type";
   let description = [{
     `reuse_ir.union` is a tagged union of other types
@@ -309,20 +267,11 @@ def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",
     size = ::llvm::alignTo(size, alignment.value());
     return {size, alignment};
   }
-  ::mlir::reuse_ir::CompositeLayout getCompositeLayout(::mlir::DataLayout layout) const {
-    auto tagType = getTagType();
-    auto [dataSz, dataAlign] = getDataLayout(layout);
-    auto cnt = dataSz.getFixedValue() / dataAlign.value();
-    auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
-        mlir::IntegerType::get(getContext(), 8), dataAlign.value());
-    auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
-    return {layout, {tagType, dataArea}};
-  }
   }];
 }
 
 def ReuseIR_ClosureType : ReuseIR_Type<"Closure", "closure",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
 
   let summary = "ReuseIR Closure Type";
   let description = [{

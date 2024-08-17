@@ -148,7 +148,8 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
     emitRuntimeFunctions(module->getLoc(), targetIdxTy, builder);
   }
   mlir::LLVMTypeConverter converter(&getContext());
-  populateLLVMTypeConverter(dataLayout, converter);
+  CompositeLayoutCache cache(dataLayout);
+  populateLLVMTypeConverter(cache, converter);
   mlir::RewritePatternSet patterns(&getContext());
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
   patterns.add<IncOpLowering, AllocOpLowering, FreeOpLowering>(converter,

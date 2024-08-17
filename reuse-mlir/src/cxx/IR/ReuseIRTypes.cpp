@@ -56,6 +56,7 @@ GENERATE_POINTER_ALIKE_LAYOUT(TokenType)
 GENERATE_POINTER_ALIKE_LAYOUT(MRefType)
 GENERATE_POINTER_ALIKE_LAYOUT(RegionCtxType)
 #pragma pop_macro("GENERATE_POINTER_ALIKE_LAYOUT")
+
 // RcBox DataLayoutInterface:
 ::llvm::TypeSize RcBoxType::getTypeSizeInBits(
     const ::mlir::DataLayout &dataLayout,
@@ -156,23 +157,19 @@ OpaqueType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
 ::llvm::TypeSize ClosureType::getTypeSizeInBits(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
-  auto ptrSize = dataLayout.getTypeSize(ptrTy);
-  return ptrSize * 3 * 8;
+  return getCompositeLayout(dataLayout).getSize() * 8;
 }
 
 uint64_t ClosureType::getABIAlignment(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return dataLayout.getTypeABIAlignment(
-      mlir::LLVM::LLVMPointerType::get(getContext()));
+  return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
 uint64_t ClosureType::getPreferredAlignment(
     const ::mlir::DataLayout &dataLayout,
     ::mlir::DataLayoutEntryListRef params) const {
-  return dataLayout.getTypePreferredAlignment(
-      mlir::LLVM::LLVMPointerType::get(getContext()));
+  return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
 // Union DataLayoutInterface:
@@ -198,19 +195,19 @@ UnionType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
 ::llvm::TypeSize CompositeType::getTypeSizeInBits(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return CompositeLayout(dataLayout, getMemberTypes()).getSize() * 8;
+  return getCompositeLayout(dataLayout).getSize() * 8;
 }
 
 uint64_t CompositeType::getABIAlignment(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return CompositeLayout(dataLayout, getMemberTypes()).getAlignment().value();
+  return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
 uint64_t CompositeType::getPreferredAlignment(
     const ::mlir::DataLayout &dataLayout,
     ::mlir::DataLayoutEntryListRef params) const {
-  return CompositeLayout(dataLayout, getMemberTypes()).getAlignment().value();
+  return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
 // Token Verifier:
@@ -335,4 +332,95 @@ void ReuseIRDialect::registerTypes() {
       >();
 }
 } // namespace REUSE_IR_DECL_SCOPE
+} // namespace mlir
+
+namespace mlir {
+namespace reuse_ir {
+// ReuseIRCompositeLayoutInterface
+::mlir::reuse_ir::CompositeLayout
+RcBoxType::getCompositeLayout(::mlir::DataLayout layout) const {
+  auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
+  auto ptrEqSize =
+      ::mlir::IntegerType::get(getContext(), layout.getTypeSizeInBits(ptrTy));
+  return (getFreezable() != ::mlir::BoolAttr() && getFreezable().getValue())
+             ? CompositeLayout{layout, {ptrEqSize, ptrTy, ptrTy, getDataType()}}
+             : CompositeLayout{layout, {ptrEqSize, getDataType()}};
+}
+::mlir::reuse_ir::CompositeLayout
+RefType::getCompositeLayout(::mlir::DataLayout layout) const {
+  auto idxTy = ::mlir::IndexType::get(getContext());
+  auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
+  llvm::SmallVector<::mlir::Type> types{ptrTy};
+  if (getRank() != 0) {
+    types.resize(types.size() + getRank(), idxTy);
+    if (getStrided().getValue())
+      types.resize(types.size() + getRank(), idxTy);
+  }
+  return {layout, types};
+}
+::mlir::reuse_ir::CompositeLayout
+VectorType::getCompositeLayout(::mlir::DataLayout layout) const {
+  auto idxTy = ::mlir::IndexType::get(getContext());
+  auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
+  return {layout, {ptrTy, idxTy, idxTy}};
+}
+::mlir::reuse_ir::CompositeLayout
+OpaqueType::getCompositeLayout(::mlir::DataLayout layout) const {
+  auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
+  auto size = getSize().getUInt();
+  auto align = getAlignment().getUInt();
+  auto dataTy = ::mlir::LLVM::LLVMFixedVectorType::get(
+      ::mlir::IntegerType::get(getContext(), 8), align);
+  auto dataArea = ::mlir::LLVM::LLVMArrayType::get(dataTy, size / align);
+  return {layout, {ptrTy, ptrTy, dataArea}};
+}
+::mlir::reuse_ir::CompositeLayout
+UnionType::getCompositeLayout(::mlir::DataLayout layout) const {
+  auto tagType = getTagType();
+  auto [dataSz, dataAlign] = getDataLayout(layout);
+  auto cnt = dataSz.getFixedValue() / dataAlign.value();
+  auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
+      mlir::IntegerType::get(getContext(), 8), dataAlign.value());
+  auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
+  return {layout, {tagType, dataArea}};
+}
+
+::mlir::reuse_ir::CompositeLayout
+CompositeType::getCompositeLayout(::mlir::DataLayout layout) const {
+  return {layout, getMemberTypes()};
+}
+
+::mlir::reuse_ir::CompositeLayout
+ClosureType::getCompositeLayout(::mlir::DataLayout layout) const {
+  auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
+  return {layout, {ptrTy, ptrTy, ptrTy}};
+}
+
+void populateLLVMTypeConverter(CompositeLayoutCache &cache,
+                               mlir::LLVMTypeConverter &converter) {
+  converter.addConversion([](RcType type) -> Type {
+    return mlir::LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](TokenType type) -> Type {
+    return mlir::LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](MRefType type) -> Type {
+    return mlir::LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](RegionCtxType type) -> Type {
+    return mlir::LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion(
+      [&converter, &cache](ReuseIRCompositeLayoutInterface type) -> Type {
+        return cache.get(type).getLLVMType(converter);
+      });
+  converter.addConversion([&converter](ArrayType type) -> Type {
+    auto eltTy = converter.convertType(type.getElementType());
+    for (auto size : llvm::reverse(type.getSizes()))
+      eltTy = mlir::LLVM::LLVMArrayType::get(eltTy, size);
+    return eltTy;
+  });
+}
+
+} // namespace reuse_ir
 } // namespace mlir
