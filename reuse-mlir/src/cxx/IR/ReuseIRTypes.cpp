@@ -134,19 +134,19 @@ VectorType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
 ::llvm::TypeSize OpaqueType::getTypeSizeInBits(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return llvm::TypeSize::getFixed(getSize().getUInt());
+  return getCompositeLayout(dataLayout).getSize() * 8;
 }
 
 uint64_t OpaqueType::getABIAlignment(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return getAlignment().getUInt();
+  return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
 uint64_t
 OpaqueType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
                                   ::mlir::DataLayoutEntryListRef params) const {
-  return getAlignment().getUInt();
+  return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
 // Closure DataLayoutInterface:

@@ -225,6 +225,11 @@ def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
   let summary = "ReuseIR Opaque Type";
   let description = [{
     `reuse_ir.opaque` is an opaque type for externally managed object.
+    Opaque {
+      void* drop;
+      void* clone;
+      T data;
+    }
   }];
 
   let parameters = (ins
@@ -234,6 +239,17 @@ def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
 
   let assemblyFormat = [{
     `<` $size `,` $alignment `>`
+  }];
+  let extraClassDeclaration = [{
+  ::mlir::reuse_ir::CompositeLayout getCompositeLayout(::mlir::DataLayout layout) const {
+    auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
+    auto size = getSize().getUInt();
+    auto align = getAlignment().getUInt();
+    auto dataTy = ::mlir::LLVM::LLVMFixedVectorType::get(
+        ::mlir::IntegerType::get(getContext(), 8), align);
+    auto dataArea = ::mlir::LLVM::LLVMArrayType::get(dataTy, size / align);
+    return {layout, {ptrTy, ptrTy, dataArea}};
+  }
   }];
 }
 

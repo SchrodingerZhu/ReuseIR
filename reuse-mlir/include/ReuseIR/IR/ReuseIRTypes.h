@@ -114,8 +114,8 @@ inline void populateLLVMTypeConverter(mlir::DataLayout layout,
   });
   converter.addConversion([](ClosureType type) -> Type {
     auto ptrTy = mlir::LLVM::LLVMPointerType::get(type.getContext());
-    return LLVM::LLVMStructType::getLiteral(
-        type.getContext(), {ptrTy, ptrTy, ptrTy});
+    return LLVM::LLVMStructType::getLiteral(type.getContext(),
+                                            {ptrTy, ptrTy, ptrTy});
   });
   converter.addConversion([&converter](ArrayType type) -> Type {
     auto eltTy = converter.convertType(type.getElementType());
@@ -123,14 +123,8 @@ inline void populateLLVMTypeConverter(mlir::DataLayout layout,
       eltTy = mlir::LLVM::LLVMArrayType::get(eltTy, size);
     return eltTy;
   });
-  converter.addConversion([](OpaqueType type) -> Type {
-    auto alignment = type.getAlignment().getUInt();
-    auto size = type.getSize().getUInt();
-    auto cnt = size / alignment;
-    auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
-        mlir::IntegerType::get(type.getContext(), 8), alignment);
-    auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
-    return mlir::LLVM::LLVMStructType::getLiteral(type.getContext(), dataArea);
+  converter.addConversion([&converter, layout](OpaqueType type) -> Type {
+    return type.getCompositeLayout(layout).getLLVMType(converter);
   });
   converter.addConversion([&converter, layout](UnionType type) -> Type {
     return type.getCompositeLayout(layout).getLLVMType(converter);
