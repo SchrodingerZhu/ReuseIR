@@ -4,6 +4,7 @@
 include "mlir/Interfaces/DataLayoutInterfaces.td"
 include "mlir/IR/BuiltinTypes.td"
 include "ReuseIR/IR/ReuseIRDialect.td"
+include "ReuseIR/Interfaces/ReuseIRMangleInterface.td"
 
 class ReuseIR_Type<string name, string typeMnemonic, list<Trait> traits = [],
                string baseCppClass = "::mlir::Type">
@@ -20,7 +21,7 @@ def ReuseIR_FPType : AnyTypeOf<[
 ]>;
 
 def ReuseIR_TokenType : ReuseIR_Type<"Token", "token",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRMangleInterface>]> {
   let summary = "ReuseIR Memory Token";
   let description = [{
     `reuse_ir.token` is the token of the memory

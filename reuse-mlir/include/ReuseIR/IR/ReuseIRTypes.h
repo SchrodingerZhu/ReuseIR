@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ReuseIR/Common.h"
+#include "ReuseIR/Interfaces/ReuseIRMangleInterface.h"
 
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"

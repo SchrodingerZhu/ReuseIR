@@ -21,7 +21,10 @@
 #include "llvm/Support/TypeSize.h"
 #include <algorithm>
 #include <cstddef>
+#include <format>
+#include <iterator>
 #include <numeric>
+#include <string>
 
 #define GET_TYPEDEF_CLASSES
 #include "ReuseIR/IR/ReuseIROpsTypes.cpp.inc"
@@ -315,6 +318,13 @@ void RcType::print(::mlir::AsmPrinter &odsPrinter) const {
   }
   odsPrinter << ">";
 }
+
+// TokenType mangle
+void TokenType::formatMangledNameTo(std::string &buffer) const {
+  std::format_to(std::back_inserter(buffer), "5TokenILm{}ELm{}EE", getSize(),
+                 getAlignment());
+}
+
 void ReuseIRDialect::registerTypes() {
   (void)generatedTypePrinter;
   (void)generatedTypeParser;

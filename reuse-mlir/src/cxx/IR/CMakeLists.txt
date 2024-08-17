@@ -6,9 +6,11 @@ add_mlir_dialect_library(MLIRReuseIR
     ReuseIRAttrs.cpp
     ReuseIROps.cpp
   DEPENDS
+    MLIRReuseIRInterfaces
     MLIRReuseIROpsIncGen
   LINK_COMPONENTS
     Core
   LINK_LIBS PUBLIC
     ${dialect_libs}
+    MLIRReuseIRInterfaces
 )
