@@ -80,4 +80,26 @@ def IncOp : ReuseIR_Op<"inc"> {
   let hasVerifier = 1;
 }
 
+def ProjectableType : AnyTypeOf<[ReuseIR_RcType, ReuseIR_RefType, ReuseIR_CompositeType, ReuseIR_ArrayType]>;
+def IndexibleType : AnyTypeOf<[ReuseIR_ArrayType, ReuseIR_VectorType, ReuseIR_RefType]>;
+
+def ProjOp : ReuseIR_Op<"proj"> {
+  let summary = "Project a field out of a value type or a referential type";
+  let description = [{
+    `reuse_ir.proj` projects a field out of a value type or a referential type.
+    The reference counter is not mantained in this operation.
+    ```mlir
+    reuse_ir.proj %0[0] : !reuse_ir.rc<!reuse_ir.composite<i32, i32>>, 0) -> i32
+    ```
+  }];
+  let results = (outs I32:$result);
+  let arguments = (ins Arg<ProjectableType, "projectable object", [MemRead]>:$object, I64ArrayAttr:$indices);
+
+  let assemblyFormat = [{
+    `(` $object `[` $indices `]` `)` attr-dict `:` functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
 #endif // REUSE_IR_OPS

@@ -351,10 +351,10 @@ RefType::getCompositeLayout(::mlir::DataLayout layout) const {
   auto idxTy = ::mlir::IndexType::get(getContext());
   auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
   llvm::SmallVector<::mlir::Type> types{ptrTy};
-  if (getRank() != 0) {
-    types.resize(types.size() + getRank(), idxTy);
+  if (getRank()) {
+    types.resize(types.size() + getRank().getUInt(), idxTy);
     if (getStrided().getValue())
-      types.resize(types.size() + getRank(), idxTy);
+      types.resize(types.size() + getRank().getUInt(), idxTy);
   }
   return {layout, types};
 }

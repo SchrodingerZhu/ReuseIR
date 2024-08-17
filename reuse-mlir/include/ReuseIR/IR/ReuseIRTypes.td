@@ -140,7 +140,7 @@ def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
 
   let parameters = (ins
     "mlir::Type":$pointee,
-    OptionalParameter<"size_t">:$rank,
+    OptionalParameter<"::mlir::IntegerAttr">:$rank,
     OptionalParameter<"::mlir::BoolAttr">:$strided
   );
 
