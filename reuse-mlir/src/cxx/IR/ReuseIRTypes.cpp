@@ -52,6 +52,7 @@ namespace REUSE_IR_DECL_SCOPE {
         mlir::LLVM::LLVMPointerType::get(getContext()));                       \
   }
 GENERATE_POINTER_ALIKE_LAYOUT(RcType)
+GENERATE_POINTER_ALIKE_LAYOUT(RefType)
 GENERATE_POINTER_ALIKE_LAYOUT(TokenType)
 GENERATE_POINTER_ALIKE_LAYOUT(MRefType)
 GENERATE_POINTER_ALIKE_LAYOUT(RegionCtxType)
@@ -72,25 +73,6 @@ uint64_t RcBoxType::getABIAlignment(
 uint64_t
 RcBoxType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
                                  ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getAlignment().value();
-}
-
-// Ref DataLayoutInterface:
-::llvm::TypeSize RefType::getTypeSizeInBits(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getSize() * 8;
-}
-
-uint64_t RefType::getABIAlignment(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getAlignment().value();
-}
-
-uint64_t
-RefType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
-                               ::mlir::DataLayoutEntryListRef params) const {
   return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
@@ -347,18 +329,6 @@ RcBoxType::getCompositeLayout(::mlir::DataLayout layout) const {
              : CompositeLayout{layout, {ptrEqSize, getDataType()}};
 }
 ::mlir::reuse_ir::CompositeLayout
-RefType::getCompositeLayout(::mlir::DataLayout layout) const {
-  auto idxTy = ::mlir::IndexType::get(getContext());
-  auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
-  llvm::SmallVector<::mlir::Type> types{ptrTy};
-  if (getRank()) {
-    types.resize(types.size() + getRank().getUInt(), idxTy);
-    if (getStrided().getValue())
-      types.resize(types.size() + getRank().getUInt(), idxTy);
-  }
-  return {layout, types};
-}
-::mlir::reuse_ir::CompositeLayout
 VectorType::getCompositeLayout(::mlir::DataLayout layout) const {
   auto idxTy = ::mlir::IndexType::get(getContext());
   auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
@@ -398,6 +368,9 @@ ClosureType::getCompositeLayout(::mlir::DataLayout layout) const {
 
 void populateLLVMTypeConverter(CompositeLayoutCache &cache,
                                mlir::LLVMTypeConverter &converter) {
+  converter.addConversion([](RefType type) -> Type {
+    return mlir::LLVM::LLVMPointerType::get(type.getContext());
+  });
   converter.addConversion([](RcType type) -> Type {
     return mlir::LLVM::LLVMPointerType::get(type.getContext());
   });

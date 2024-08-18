@@ -131,7 +131,7 @@ def ReuseIR_MRefType : ReuseIR_Type<"MRef", "mref",
 }
 
 def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
 
   let summary = "ReuseIR Reference Type";
   let description = [{
@@ -139,13 +139,11 @@ def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
   }];
 
   let parameters = (ins
-    "mlir::Type":$pointee,
-    OptionalParameter<"::mlir::IntegerAttr">:$rank,
-    OptionalParameter<"::mlir::BoolAttr">:$strided
+    "mlir::Type":$pointee
   );
 
   let assemblyFormat = [{
-    `<` $pointee ( `,` `rank` `:` $rank^ `,` `strided` `:` $strided  )? `>`
+    `<` $pointee `>`
   }];
 }
 
