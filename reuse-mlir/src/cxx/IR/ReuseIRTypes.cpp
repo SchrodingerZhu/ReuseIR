@@ -21,6 +21,7 @@
 #include "llvm/Support/TypeSize.h"
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <iterator>
 #include <numeric>
@@ -80,8 +81,8 @@ RcBoxType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
 ::llvm::TypeSize ArrayType::getTypeSizeInBits(
     const ::mlir::DataLayout &dataLayout,
     [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  size_t numOfElems = std::reduce(getSizes().begin(), getSizes().end(), 1,
-                                  std::multiplies<size_t>());
+  uint64_t numOfElems = std::reduce(getSizes().begin(), getSizes().end(), 1,
+                                    std::multiplies<uint64_t>());
   return dataLayout.getTypeSizeInBits(getElementType()) * numOfElems;
 }
 
