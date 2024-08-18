@@ -1,14 +1,12 @@
 #include "ReuseIR/IR/ReuseIROps.h"
 #include "ReuseIR/Common.h"
 #include "ReuseIR/IR/ReuseIRTypes.h"
-
-#include "llvm/Support/LogicalResult.h"
-#include <llvm-20/llvm/Support/ErrorHandling.h>
+#include "llvm/Support/ErrorHandling.h"
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
 // IncOp
-llvm::LogicalResult IncOp::verify() {
+mlir::reuse_ir::LogicalResult IncOp::verify() {
   RcType rcPtrTy = getRcPtr().getType();
   if (auto attr = rcPtrTy.getFrozen())
     if (!attr.getValue())
@@ -16,10 +14,10 @@ llvm::LogicalResult IncOp::verify() {
           "cannot increase a non-frozen but freezable RC pointer");
   if (getCount() && *getCount() == 0)
     return emitError("the amount of increment must be non-zero");
-  return llvm::success();
+  return mlir::reuse_ir::success();
 }
 // ProjOp
-llvm::LogicalResult ProjOp::verify() {
+mlir::reuse_ir::LogicalResult ProjOp::verify() {
   mlir::Type innerType;
   if (auto type = llvm::dyn_cast<RefType>(getObject().getType()))
     innerType = type.getPointee();
@@ -30,7 +28,7 @@ llvm::LogicalResult ProjOp::verify() {
   innerType = innerType ? innerType : getObject().getType();
 
   // TODO: handle verification recursively.
-  return llvm::success();
+  return mlir::reuse_ir::success();
 }
 
 } // namespace REUSE_IR_DECL_SCOPE
@@ -38,19 +36,3 @@ llvm::LogicalResult ProjOp::verify() {
 
 #define GET_OP_CLASSES
 #include "ReuseIR/IR/ReuseIROps.cpp.inc"
-
-/*
-clang-format off
- ▄            ▄         ▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄         ▄       ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄       ▄▄  ▄▄▄▄▄▄▄▄▄▄▄ 
-▐░▌          ▐░▌       ▐░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░▌     ▐░░▌▐░░░░░░░░░░░▌
-▐░▌          ▐░▌       ▐░▌▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░▌       ▐░▌      ▀▀▀▀█░█▀▀▀▀  ▀▀▀▀█░█▀▀▀▀ ▐░▌░▌   ▐░▐░▌▐░█▀▀▀▀▀▀▀▀▀ 
-▐░▌          ▐░▌       ▐░▌▐░▌▐░▌    ▐░▌▐░▌          ▐░▌       ▐░▌          ▐░▌          ▐░▌     ▐░▌▐░▌ ▐░▌▐░▌▐░▌          
-▐░▌          ▐░▌       ▐░▌▐░▌ ▐░▌   ▐░▌▐░▌          ▐░█▄▄▄▄▄▄▄█░▌          ▐░▌          ▐░▌     ▐░▌ ▐░▐░▌ ▐░▌▐░█▄▄▄▄▄▄▄▄▄ 
-▐░▌          ▐░▌       ▐░▌▐░▌  ▐░▌  ▐░▌▐░▌          ▐░░░░░░░░░░░▌          ▐░▌          ▐░▌     ▐░▌  ▐░▌  ▐░▌▐░░░░░░░░░░░▌
-▐░▌          ▐░▌       ▐░▌▐░▌   ▐░▌ ▐░▌▐░▌          ▐░█▀▀▀▀▀▀▀█░▌          ▐░▌          ▐░▌     ▐░▌   ▀   ▐░▌▐░█▀▀▀▀▀▀▀▀▀ 
-▐░▌          ▐░▌       ▐░▌▐░▌    ▐░▌▐░▌▐░▌          ▐░▌       ▐░▌          ▐░▌          ▐░▌     ▐░▌       ▐░▌▐░▌          
-▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌          ▐░▌      ▄▄▄▄█░█▄▄▄▄ ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄▄▄ 
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌      ▐░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌          ▐░▌     ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░░▌
- ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀            ▀       ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀▀
-clang-format on
-*/

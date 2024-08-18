@@ -23,7 +23,7 @@ namespace REUSE_IR_DECL_SCOPE {
 class AllocOpLowering : public mlir::OpConversionPattern<AllocOp> {
 public:
   using OpConversionPattern<AllocOp>::OpConversionPattern;
-  mlir::LogicalResult matchAndRewrite(
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
       AllocOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
     TokenType tokenTy = op.getToken().getType();
@@ -35,14 +35,14 @@ public:
     rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
         op, "__reuse_ir_alloc", mlir::LLVM::LLVMPointerType::get(getContext()),
         mlir::ValueRange{size, alignment});
-    return mlir::success();
+    return mlir::reuse_ir::success();
   }
 };
 
 class FreeOpLowering : public mlir::OpConversionPattern<FreeOp> {
 public:
   using OpConversionPattern<FreeOp>::OpConversionPattern;
-  mlir::LogicalResult matchAndRewrite(
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
       FreeOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
     TokenType tokenTy = op.getToken().getType();
@@ -54,7 +54,7 @@ public:
     rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
         op, "__reuse_ir_dealloc", mlir::ValueRange{},
         mlir::ValueRange{adaptor.getToken(), size, alignment});
-    return mlir::success();
+    return mlir::reuse_ir::success();
   }
 };
 
@@ -62,7 +62,7 @@ class IncOpLowering : public mlir::OpConversionPattern<IncOp> {
 public:
   using OpConversionPattern<IncOp>::OpConversionPattern;
 
-  mlir::LogicalResult matchAndRewrite(
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
       IncOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
     RcType rcPtrTy = op.getRcPtr().getType();
@@ -100,7 +100,7 @@ public:
         rewriter.replaceOpWithNewOp<mlir::LLVM::StoreOp>(op, newRcVal, rcField);
       }
     }
-    return mlir::success();
+    return mlir::reuse_ir::success();
   }
 };
 

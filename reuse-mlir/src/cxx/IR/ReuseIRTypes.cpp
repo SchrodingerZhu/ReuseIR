@@ -193,7 +193,7 @@ uint64_t CompositeType::getPreferredAlignment(
 }
 
 // Token Verifier:
-::llvm::LogicalResult
+::mlir::reuse_ir::LogicalResult
 TokenType::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
                   size_t alignment, size_t size) {
   if (!llvm::isPowerOf2_64(alignment))
@@ -202,7 +202,7 @@ TokenType::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
     return emitError() << "size must be non-zero";
   if (size % alignment != 0)
     return emitError() << "size must be a multiple of alignment";
-  return ::llvm::success();
+  return ::mlir::reuse_ir::success();
 }
 
 // RcType Parser and Printer:

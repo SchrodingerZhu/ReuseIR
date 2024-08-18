@@ -256,7 +256,7 @@ def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",
     return ::mlir::IntegerType::get(getContext(), ::llvm::Log2_64(::llvm::PowerOf2Ceil(getMemberTypes().size())));
   }
   std::pair<::llvm::TypeSize, ::llvm::Align> getDataLayout(::mlir::DataLayout layout) const {
-    ::llvm::TypeSize size = ::llvm::TypeSize::getZero();
+    ::llvm::TypeSize size = ::llvm::TypeSize::getFixed(0);
     ::llvm::Align alignment {1};
     for (auto type : getMemberTypes()) {
         size = std::max(size, ::llvm::TypeSize::getFixed(layout.getTypeSize(type)));

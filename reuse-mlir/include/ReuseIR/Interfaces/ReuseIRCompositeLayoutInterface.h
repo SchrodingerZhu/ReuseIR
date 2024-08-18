@@ -22,7 +22,7 @@ public:
 
 private:
   llvm::Align alignment = llvm::Align{1};
-  llvm::TypeSize size = llvm::TypeSize::getZero();
+  llvm::TypeSize size = llvm::TypeSize::getFixed(0);
   llvm::SmallVector<FieldKind> raw_fields;
   llvm::DenseMap<size_t, Field> field_map;
 
