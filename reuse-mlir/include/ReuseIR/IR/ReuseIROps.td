@@ -81,7 +81,6 @@ def IncOp : ReuseIR_Op<"inc"> {
 }
 
 def ProjectableType : AnyTypeOf<[ReuseIR_RcType, ReuseIR_RefType, ReuseIR_CompositeType, ReuseIR_ArrayType]>;
-def IndexibleType : AnyTypeOf<[ReuseIR_ArrayType, ReuseIR_VectorType, ReuseIR_RefType]>;
 
 def ProjOp : ReuseIR_Op<"proj"> {
   let summary = "Project a field out of a value type or a referential type";
@@ -89,14 +88,30 @@ def ProjOp : ReuseIR_Op<"proj"> {
     `reuse_ir.proj` projects a field out of a value type or a referential type.
     The reference counter is not mantained in this operation.
     ```mlir
-    reuse_ir.proj %0[0] : !reuse_ir.rc<!reuse_ir.composite<i32, i32>>, 0) -> i32
+    %0 = reuse_ir.proj %0[0] : !reuse_ir.rc<!reuse_ir.composite<i32, i32>> -> i32
     ```
+    For value type, this translates to llvm.extract_value. 
+    For referential type, this translates to a GEP chain with a load.
+    If there is no index, the projection loads the whole object behind a referential type.
+    ```mlir
+    %0 = reuse_ir.proj %0 : !reuse_ir.rc<i32> -> i32
+    ```
+    Multiple indices can be used to access nested value-based composite/array types.
+    ```mlir
+    %1 = reuse_ir.proj %0[0, 1] : 
+            !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>> -> i32
+    ```
+    It is not allowed to project into nested referential types. 
+    In such cases, one should first project the outer referential type and then project the 
+    inner referential type.
+    For `reuse.mref` inside a freezable RC object, the projected result is a RC pointer with the
+    same frozen attribute as the original object.
   }];
   let results = (outs I32:$result);
-  let arguments = (ins Arg<ProjectableType, "projectable object", [MemRead]>:$object, I64ArrayAttr:$indices);
+  let arguments = (ins Arg<ProjectableType, "projectable object", [MemRead]>:$object, OptionalAttr<I64ArrayAttr>:$indices);
 
   let assemblyFormat = [{
-    `(` $object `[` $indices `]` `)` attr-dict `:` functional-type(operands, results)
+    $object ($indices^)? attr-dict `:` type($object) `->` type($result)
   }];
 
   let hasVerifier = 1;

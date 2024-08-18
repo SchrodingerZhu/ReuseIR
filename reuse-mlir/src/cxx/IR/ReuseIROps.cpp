@@ -30,7 +30,7 @@ llvm::LogicalResult ProjOp::verify() {
   innerType = innerType ? innerType : getObject().getType();
 
   // TODO: handle verification recursively.
-  llvm_unreachable("TODO");
+  return llvm::success();
 }
 
 } // namespace REUSE_IR_DECL_SCOPE

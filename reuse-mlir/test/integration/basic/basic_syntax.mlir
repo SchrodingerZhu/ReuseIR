@@ -19,4 +19,9 @@ module @test {
     func.func @qux(%0 : !reuse_ir.rc<i64, frozen : false, atomic : true>) {
         return
     }
+    func.func @projection(%0: !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>>) {
+        %1 = reuse_ir.proj %0[0, 1] : 
+            !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>> -> i32
+        return
+    }
 }
