@@ -1,41 +1,41 @@
-use crate::name::Name;
+use crate::name::Ident;
 
-trait Syntax {}
+pub trait Syntax {}
 
 #[allow(dead_code)]
-struct Param<T: Syntax> {
-    name: Name,
-    typ: Box<T>,
+pub struct Param<'src, T: Syntax> {
+    pub name: Ident<'src>,
+    pub typ: Box<T>,
 }
 
 #[allow(dead_code)]
-struct Decl<T: Syntax> {
-    name: Name,
-    typ_params: Box<[Param<T>]>,
-    val_params: Box<[Param<T>]>,
-    eff: Box<T>,
-    ret: Box<T>,
-    def: Def<T>,
+pub struct Decl<'src, T: Syntax> {
+    pub name: Ident<'src>,
+    pub typ_params: Box<[Param<'src, T>]>,
+    pub val_params: Box<[Param<'src, T>]>,
+    pub eff: Box<T>,
+    pub ret: Box<T>,
+    pub def: Def<'src, T>,
 }
 
 #[allow(dead_code)]
-enum Def<T: Syntax> {
+pub enum Def<'src, T: Syntax> {
     Fn(FnDef<T>),
-    Data(DataDef<T>),
+    Data(DataDef<'src, T>),
 }
 
 #[allow(dead_code)]
-struct FnDef<T: Syntax> {
-    f: Box<T>,
+pub struct FnDef<T: Syntax> {
+    pub body: Box<T>,
 }
 
 #[allow(dead_code)]
-struct DataDef<T: Syntax> {
-    ctors: Box<[Ctor<T>]>,
+pub struct DataDef<'src, T: Syntax> {
+    ctors: Box<[Ctor<'src, T>]>,
 }
 
 #[allow(dead_code)]
-struct Ctor<T: Syntax> {
-    name: Name,
-    val_params: Box<[Param<T>]>,
+pub struct Ctor<'src, T: Syntax> {
+    name: Ident<'src>,
+    val_params: Box<[Param<'src, T>]>,
 }

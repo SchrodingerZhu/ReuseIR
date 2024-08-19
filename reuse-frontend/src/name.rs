@@ -1,29 +1,30 @@
 use std::fmt::{Display, Formatter};
 
-type ID = u64;
+pub type ID = u64;
 
-pub struct Name {
+pub struct Ident<'src> {
     id: ID,
-    raw: String,
+    raw: &'src str,
 }
 
-impl Display for Name {
+impl<'src> Ident<'src> {
+    pub fn new(id: ID, raw: &'src str) -> Self {
+        Self { id, raw }
+    }
+}
+
+impl<'src> Display for Ident<'src> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}@{}", self.raw, self.id)
     }
 }
 
-#[allow(dead_code)]
 #[derive(Default)]
-struct IDs(ID);
+pub struct IDs(ID);
 
 impl IDs {
-    #[allow(dead_code)]
-    fn fresh(&mut self, raw: &str) -> Name {
+    pub fn fresh(&mut self) -> ID {
         self.0 += 1;
-        Name {
-            id: self.0,
-            raw: raw.to_string(),
-        }
+        self.0
     }
 }
