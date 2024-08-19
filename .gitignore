@@ -34,6 +34,9 @@
 # CMake Build directory
 build*/
 
+# clangd
+compile_commands.json
+
 # Rust
 target/
 Cargo.lock
