@@ -107,15 +107,15 @@ def ProjOp : ReuseIR_Op<"proj"> {
     For `reuse.mref` inside a freezable RC object, the projected result is a RC pointer with the
     same frozen attribute as the original object.
   }];
-  let results = (outs I32:$result);
+  let results = (outs AnyType:$result);
   let arguments = (
     ins Arg<ProjectableType, "projectable object", [MemRead]>:$object,
     OptionalAttr<I64ArrayAttr>:$indices,
-    OptionalAttr<UnitAttr>:$asRef
+    OptionalAttr<UnitAttr>:$asReference
   );
 
   let assemblyFormat = [{
-    $object ($indices^)? ($asRef^)? attr-dict `:` type($object) `->` type($result)
+    (custom<AsReferenceAttr>($asReference)^)? $object ($indices^)? attr-dict `:` type($object) `->` type($result)
   }];
 
   let hasVerifier = 1;
@@ -139,8 +139,9 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
   let assemblyFormat = [{
     `(` $object `:` type($object) `)` attr-dict
   }];
-
-  let hasVerifier = 1;
+  
+  // TODO: add verifier
+  let hasVerifier = 0;
 }
 
 #endif // REUSE_IR_OPS

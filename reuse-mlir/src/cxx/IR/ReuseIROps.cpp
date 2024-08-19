@@ -1,6 +1,9 @@
 #include "ReuseIR/IR/ReuseIROps.h"
 #include "ReuseIR/Common.h"
 #include "ReuseIR/IR/ReuseIRTypes.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/OpImplementation.h"
 #include "llvm/Support/ErrorHandling.h"
 
 namespace mlir {
@@ -31,6 +34,23 @@ mlir::reuse_ir::LogicalResult ProjOp::verify() {
   return mlir::reuse_ir::success();
 }
 
+template <StringLiteral Literal> struct ParseKeywordAsUnitAttr {
+  OptionalParseResult operator()(OpAsmParser &parser, UnitAttr &attr) {
+    if (parser.parseOptionalKeyword(Literal).succeeded())
+      attr = UnitAttr::get(parser.getContext());
+    return success();
+  }
+};
+
+template <StringLiteral Literal> struct PrintKeywordAsUnitAttr {
+  void operator()(OpAsmPrinter &printer, ProjOp, const UnitAttr &attr) {
+    if (attr)
+      printer.printKeywordOrString(Literal);
+  }
+};
+
+ParseKeywordAsUnitAttr<StringLiteral("as_reference")> parseAsReferenceAttr;
+PrintKeywordAsUnitAttr<StringLiteral("as_reference")> printAsReferenceAttr;
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 
