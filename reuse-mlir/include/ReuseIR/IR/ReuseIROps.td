@@ -91,7 +91,7 @@ def ProjOp : ReuseIR_Op<"proj"> {
     %0 = reuse_ir.proj %0[0] : !reuse_ir.rc<!reuse_ir.composite<i32, i32>> -> i32
     ```
     For value type, this translates to llvm.extract_value. 
-    For referential type, this translates to a GEP chain with a load.
+    For referential type, this translates to a GEP chain with/without a load depending on the asRef attribute.
     If there is no index, the projection loads the whole object behind a referential type.
     ```mlir
     %0 = reuse_ir.proj %0 : !reuse_ir.rc<i32> -> i32
@@ -107,14 +107,41 @@ def ProjOp : ReuseIR_Op<"proj"> {
     For `reuse.mref` inside a freezable RC object, the projected result is a RC pointer with the
     same frozen attribute as the original object.
   }];
-  let results = (outs I32:$result);
-  let arguments = (ins Arg<ProjectableType, "projectable object", [MemRead]>:$object, OptionalAttr<I64ArrayAttr>:$indices);
+  let results = (outs AnyType:$result);
+  let arguments = (
+    ins Arg<ProjectableType, "projectable object", [MemRead]>:$object,
+    OptionalAttr<I64ArrayAttr>:$indices,
+    OptionalAttr<UnitAttr>:$asReference
+  );
 
   let assemblyFormat = [{
-    $object ($indices^)? attr-dict `:` type($object) `->` type($result)
+    (custom<AsReferenceAttr>($asReference)^)? $object ($indices^)? attr-dict `:` type($object) `->` type($result)
   }];
 
   let hasVerifier = 1;
+}
+
+def DestroyOp : ReuseIR_Op<"destroy"> {
+  let summary = "Destroy a value type or a referential type";
+  let description = [{
+    - For composite/union type (either a reference or the value), 
+      this operation project out the fields that require additional 
+      maintenance and apply the required operations.
+      - For RC type, it applies the `reuse_ir.dec` operation.
+      - For nested composite/union types, it recursively applies the 
+        `reuse_ir.destroy` operation.
+    - Specialized types such as Opaque/Vector/Closure are specially handled.
+  }];
+
+  // TODO: Add type restrictions
+  let arguments = (ins Arg<AnyType, "destroyable object", [MemRead]>:$object);
+
+  let assemblyFormat = [{
+    `(` $object `:` type($object) `)` attr-dict
+  }];
+  
+  // TODO: add verifier
+  let hasVerifier = 0;
 }
 
 #endif // REUSE_IR_OPS

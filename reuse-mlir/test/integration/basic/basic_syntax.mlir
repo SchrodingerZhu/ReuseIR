@@ -24,4 +24,9 @@ module @test {
             !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>> -> i32
         return
     }
+    func.func @projection_ref(%0: !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>>) {
+        %1 = reuse_ir.proj as_reference %0[0, 1] : 
+            !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>> -> !reuse_ir.ref<!reuse_ir.composite<i32, i32>>
+        return
+    }
 }
