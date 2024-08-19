@@ -2,7 +2,7 @@ use chumsky::error::Cheap;
 use chumsky::extra::Err;
 use chumsky::prelude::just;
 use chumsky::text::ascii::keyword;
-use chumsky::text::ident;
+use chumsky::text::{ident, inline_whitespace, newline};
 use chumsky::{IterParser, Parser};
 
 use crate::concrete::{Expr, ParamExpr};
@@ -66,6 +66,8 @@ impl Surface {
             .then_ignore(just(':'))
             .padded()
             .then(self.expr())
+            .padded_by(inline_whitespace())
+            .then_ignore(newline())
             .map(|((((name, typ_params), val_params), ret), body)| Decl {
                 name,
                 typ_params: typ_params.unwrap_or_default().into_boxed_slice(),
