@@ -43,7 +43,7 @@ template <StringLiteral Literal> struct ParseKeywordAsUnitAttr {
 };
 
 template <StringLiteral Literal> struct PrintKeywordAsUnitAttr {
-  void operator()(OpAsmPrinter &printer, ProjOp, const UnitAttr &attr) {
+  void operator()(OpAsmPrinter &printer, Operation *, const UnitAttr &attr) {
     if (attr)
       printer.printKeywordOrString(Literal);
   }
