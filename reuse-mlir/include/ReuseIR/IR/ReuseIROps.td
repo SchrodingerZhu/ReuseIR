@@ -82,6 +82,47 @@ def IncOp : ReuseIR_Op<"inc"> {
 
 def ProjectableType : AnyTypeOf<[ReuseIR_RcType, ReuseIR_RefType, ReuseIR_CompositeType, ReuseIR_ArrayType]>;
 
+def ValueToRefOp : ReuseIR_Op<"val2ref"> {
+    let summary = "Promote a value to stack and get the reference";
+    let description = [{
+      `reuse_ir.val2ref` is used to promote a value to an alloca on stack.
+      For composite/union/array arguments passed as values, this operation 
+      should be used at the beginning of the function.
+    }];
+    let results = (outs ReuseIR_RefType:$result);
+    let arguments = (
+        ins AnyType:$value
+    );
+    let assemblyFormat = [{
+      $value attr-dict `:` type($value) `->` type($result)
+    }];
+}
+
+def BorrowOp : ReuseIR_Op<"borrow"> {
+    let summary = "Borrow the managed object and get the reference";
+    let description = [{
+      `reuse_ir.borrow` is used to get the reference to the managed object.
+    }];
+    let results = (outs ReuseIR_RefType:$result);
+    let arguments = (
+        ins ReuseIR_RcType:$object
+    );
+    let assemblyFormat = [{
+      $object attr-dict `:` type($object) `->` type($result)
+    }];
+}
+
+// TODO:
+// def RefToValueOp : : ReuseIR_Op<"ref2val"> {
+//     let summary = "Promote a value to stack and get the reference";
+//     let description = [{
+//       `reuse_ir.val2ref` is used to promote a value to an alloca on stack.
+//       For arguments passed as values, this operation should be used at the
+//       beginning of the function to allow
+//     }];
+// }
+
+// TODO: simplify proj
 def ProjOp : ReuseIR_Op<"proj"> {
   let summary = "Project a field out of a value type or a referential type";
   let description = [{
@@ -109,7 +150,7 @@ def ProjOp : ReuseIR_Op<"proj"> {
   }];
   let results = (outs AnyType:$result);
   let arguments = (
-    ins Arg<ProjectableType, "projectable object", [MemRead]>:$object,
+    ins Arg<ReuseIR_RefType, "projectable object", [MemRead]>:$object,
     OptionalAttr<I64ArrayAttr>:$indices,
     OptionalAttr<UnitAttr>:$asReference
   );
@@ -134,7 +175,7 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
   }];
 
   // TODO: Add type restrictions
-  let arguments = (ins Arg<AnyType, "destroyable object", [MemRead]>:$object);
+  let arguments = (ins Arg<ReuseIR_RefType, "destroyable object", [MemRead]>:$object);
 
   let assemblyFormat = [{
     `(` $object `:` type($object) `)` attr-dict

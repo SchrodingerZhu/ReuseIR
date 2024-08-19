@@ -20,13 +20,19 @@ module @test {
         return
     }
     func.func @projection(%0: !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>>) {
-        %1 = reuse_ir.proj %0[0, 1] : 
-            !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>> -> i32
+        %1 = reuse_ir.borrow %0 : 
+            !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>>
+            -> !reuse_ir.ref<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>>
+        %2 = reuse_ir.proj %1[0, 1] : 
+            !reuse_ir.ref<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>> -> i32
         return
     }
     func.func @projection_ref(%0: !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>>) {
-        %1 = reuse_ir.proj as_reference %0[0, 1] : 
-            !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>> -> !reuse_ir.ref<!reuse_ir.composite<i32, i32>>
+        %1 = reuse_ir.borrow %0 : 
+            !reuse_ir.rc<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>>
+            -> !reuse_ir.ref<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>>
+        %2 = reuse_ir.proj as_reference %1[0, 1] : 
+            !reuse_ir.ref<!reuse_ir.composite<!reuse_ir.composite<i32, i32>, i32>> -> !reuse_ir.ref<!reuse_ir.composite<i32, i32>>
         return
     }
 }
