@@ -5,7 +5,7 @@ use chumsky::text::ascii::keyword;
 use chumsky::text::ident;
 use chumsky::{IterParser, Parser};
 
-use crate::concrete::{Expr, ExprParam};
+use crate::concrete::{Expr, ParamExpr};
 use crate::name::{IDs, Ident};
 use crate::syntax::{Decl, Def, FnDef, Param};
 
@@ -71,30 +71,36 @@ impl Surface {
                 typ_params: typ_params.unwrap_or_default().into_boxed_slice(),
                 val_params: val_params.into_boxed_slice(),
                 eff: Box::new(Expr::Pure), // TODO: parse effects
-                ret: ret.unwrap_or_else(|| Box::new(Expr::Unit)),
+                ret: ret.unwrap_or_else(|| Box::new(Expr::NoneType)),
                 def: Def::Fn(FnDef { body }),
             })
     }
 
     fn expr<'src>(&mut self) -> out!(Box<Expr<'src>>) {
-        primitive!("()", UnitValue)
+        primitive!("None", None)
+            .or(primitive!("False", True))
+            .or(primitive!("True", True))
     }
 
     fn type_expr<'src>(&mut self) -> out!(Box<Expr<'src>>) {
         primitive!("bool", Boolean)
             .or(primitive!("str", String))
-            .or(primitive!("unit", Unit))
+            .or(primitive!("None", NoneType))
+            .or(primitive!("f32", F32))
+            .or(primitive!("f64", F64))
     }
 
-    fn param<'src>(&mut self) -> out!(ExprParam<'src>) {
+    fn param<'src>(&mut self) -> out!(ParamExpr<'src>) {
         self.ident()
-            .then_ignore(just(':').padded())
+            .padded()
+            .then_ignore(just(':'))
+            .padded()
             .then(self.type_expr())
             .map(|(name, typ)| Param { name, typ })
     }
 
     fn ident<'src>(&mut self) -> out!(Ident<'src>) {
         let id = self.ids.fresh();
-        ident().padded().map(move |s| Ident::new(id, s))
+        ident().map(move |s| Ident::new(id, s))
     }
 }

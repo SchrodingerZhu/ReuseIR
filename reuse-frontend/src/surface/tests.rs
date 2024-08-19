@@ -6,6 +6,6 @@ use crate::surface::Surface;
 fn it_parses_decl() {
     Surface::default()
         .decl()
-        .parse("def foo () -> unit : ()")
+        .parse("def foo () -> None : None")
         .unwrap();
 }

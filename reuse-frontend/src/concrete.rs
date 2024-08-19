@@ -2,7 +2,7 @@ use crate::name::Ident;
 use crate::syntax::{Decl, Param, Syntax};
 
 #[allow(dead_code)]
-pub type ExprParam<'src> = Param<'src, Expr<'src>>;
+pub type ParamExpr<'src> = Param<'src, Expr<'src>>;
 
 #[allow(dead_code)]
 pub struct File<'src> {
@@ -15,11 +15,12 @@ pub enum Expr<'src> {
 
     Type,
 
-    Unit,
-    UnitValue,
+    NoneType,
+    None,
 
     Boolean,
-    Bool(bool),
+    False,
+    True,
 
     String,
     Str(&'src str),
