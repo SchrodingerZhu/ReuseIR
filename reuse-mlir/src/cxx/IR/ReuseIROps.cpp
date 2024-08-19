@@ -49,8 +49,8 @@ template <StringLiteral Literal> struct PrintKeywordAsUnitAttr {
   }
 };
 
-ParseKeywordAsUnitAttr<StringLiteral("as_reference")> parseAsReferenceAttr;
-PrintKeywordAsUnitAttr<StringLiteral("as_reference")> printAsReferenceAttr;
+ParseKeywordAsUnitAttr<"as_reference"_str> parseAsReferenceAttr;
+PrintKeywordAsUnitAttr<"as_reference"_str> printAsReferenceAttr;
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 
