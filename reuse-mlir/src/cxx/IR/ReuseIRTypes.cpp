@@ -22,7 +22,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <iterator>
 #include <numeric>
 #include <string>
@@ -300,9 +299,8 @@ void RcType::print(::mlir::AsmPrinter &odsPrinter) const {
 }
 
 // TokenType mangle
-void TokenType::formatMangledNameTo(std::string &buffer) const {
-  std::format_to(std::back_inserter(buffer), "5TokenILm{}ELm{}EE", getSize(),
-                 getAlignment());
+void TokenType::formatMangledNameTo(::llvm::raw_string_ostream &buffer) const {
+  buffer << "5TokenILm" << getSize() << "Elm" << getAlignment() << "EE";
 }
 
 void ReuseIRDialect::registerTypes() {

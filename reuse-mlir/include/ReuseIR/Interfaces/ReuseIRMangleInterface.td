@@ -14,7 +14,7 @@ def ReuseIRMangleInterface : TypeInterface<"ReuseIRMangleInterface"> {
       }],
       /*retTy=*/"void",
       /*methodName=*/"formatMangledNameTo",
-      /*args=*/(ins "::std::string &":$buffer)
+      /*args=*/(ins "::llvm::raw_string_ostream &":$buffer)
     >
   ];
 }
