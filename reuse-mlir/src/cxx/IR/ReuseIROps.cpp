@@ -11,10 +11,8 @@ namespace REUSE_IR_DECL_SCOPE {
 // IncOp
 mlir::reuse_ir::LogicalResult IncOp::verify() {
   RcType rcPtrTy = getRcPtr().getType();
-  if (auto attr = rcPtrTy.getFrozen())
-    if (!attr.getValue())
-      return emitOpError(
-          "cannot increase a non-frozen but freezable RC pointer");
+  if (rcPtrTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
+    return emitOpError("cannot increase a non-frozen but freezable RC pointer");
   if (getCount() && *getCount() == 0)
     return emitError("the amount of increment must be non-zero");
   return mlir::reuse_ir::success();
@@ -49,8 +47,8 @@ template <StringLiteral Literal> struct PrintKeywordAsUnitAttr {
   }
 };
 
-ParseKeywordAsUnitAttr<"as_reference"_str> parseAsReferenceAttr;
-PrintKeywordAsUnitAttr<"as_reference"_str> printAsReferenceAttr;
+static ParseKeywordAsUnitAttr<"as_reference"_str> parseAsReferenceAttr;
+static PrintKeywordAsUnitAttr<"as_reference"_str> printAsReferenceAttr;
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 

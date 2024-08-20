@@ -150,7 +150,7 @@ def ProjOp : ReuseIR_Op<"proj"> {
   }];
   let results = (outs AnyType:$result);
   let arguments = (
-    ins Arg<ReuseIR_RefType, "projectable object", [MemRead]>:$object,
+    ins Arg<ReuseIR_RefType, "reference to the object", [MemRead]>:$object,
     OptionalAttr<I64ArrayAttr>:$indices,
     OptionalAttr<UnitAttr>:$asReference
   );

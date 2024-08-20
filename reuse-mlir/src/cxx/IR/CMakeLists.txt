@@ -5,9 +5,11 @@ add_mlir_dialect_library(MLIRReuseIR
     ReuseIRTypes.cpp
     ReuseIRAttrs.cpp
     ReuseIROps.cpp
+    ReuseIROpsEnums.cpp
   DEPENDS
     MLIRReuseIRInterfaces
     MLIRReuseIROpsIncGen
+    MLIRReuseIREnumsIncGen
   LINK_COMPONENTS
     Core
   LINK_LIBS PUBLIC

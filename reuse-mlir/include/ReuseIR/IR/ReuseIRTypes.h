@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ReuseIR/Common.h"
+#include "ReuseIR/IR/ReuseIROpsEnums.h"
 #include "ReuseIR/Interfaces/ReuseIRCompositeLayoutInterface.h"
 #include "ReuseIR/Interfaces/ReuseIRMangleInterface.h"
 

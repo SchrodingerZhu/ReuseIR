@@ -1,4 +1,5 @@
 #include "ReuseIR/IR/ReuseIROps.h"
+#include "ReuseIR/IR/ReuseIROpsEnums.h"
 #include "ReuseIR/IR/ReuseIRTypes.h"
 #include "ReuseIR/Passes.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
@@ -66,18 +67,18 @@ public:
       IncOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
     RcType rcPtrTy = op.getRcPtr().getType();
-    mlir::reuse_ir::RcBoxType rcBoxTy = RcBoxType::get(
-        getContext(), rcPtrTy.getPointee(), rcPtrTy.getAtomic(),
-        rcPtrTy.getFrozen() ? rewriter.getBoolAttr(true) : mlir::BoolAttr());
+    mlir::reuse_ir::RcBoxType rcBoxTy =
+        RcBoxType::get(getContext(), rcPtrTy.getPointee(),
+                       rcPtrTy.getAtomicKind(), rcPtrTy.getFreezingKind());
     auto boxStruct = llvm::cast<mlir::LLVM::LLVMStructType>(
         typeConverter->convertType(rcBoxTy));
     auto rcTy = boxStruct.getBody()[0];
     auto value = adaptor.getCount() ? *adaptor.getCount() : 1;
     auto amount =
         rewriter.create<mlir::LLVM::ConstantOp>(op.getLoc(), rcTy, value);
-    if (rcPtrTy.getFrozen()) {
+    if (rcPtrTy.getFreezingKind().getValue() != FreezingKind::nonfreezing) {
       llvm::StringRef func =
-          rcPtrTy.getAtomic() && rcPtrTy.getAtomic().getValue()
+          rcPtrTy.getAtomicKind().getValue() == AtomicKind::atomic
               ? "__reuse_ir_acquire_atomic_freezable"
               : "__reuse_ir_acquire_freezable";
       rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
@@ -87,7 +88,7 @@ public:
       auto rcField = rewriter.create<mlir::LLVM::GEPOp>(
           op.getLoc(), mlir::LLVM::LLVMPointerType::get(getContext()),
           boxStruct, adaptor.getRcPtr(), mlir::LLVM::GEPArg{0});
-      if (rcPtrTy.getAtomic() && rcPtrTy.getAtomic().getValue()) {
+      if (rcPtrTy.getAtomicKind().getValue() == AtomicKind::atomic) {
         rewriter.replaceOpWithNewOp<mlir::LLVM::AtomicRMWOp>(
             op, mlir::LLVM::AtomicBinOp::add, rcField, amount,
             mlir::LLVM::AtomicOrdering::seq_cst);

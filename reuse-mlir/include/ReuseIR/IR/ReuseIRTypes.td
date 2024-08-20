@@ -3,9 +3,31 @@
 
 include "mlir/Interfaces/DataLayoutInterfaces.td"
 include "mlir/IR/BuiltinTypes.td"
+include "mlir/IR/EnumAttr.td"
 include "ReuseIR/IR/ReuseIRDialect.td"
 include "ReuseIR/Interfaces/ReuseIRMangleInterface.td"
 include "ReuseIR/Interfaces/ReuseIRCompositeLayoutInterface.td"
+
+def AK_NonAtomic : I32EnumAttrCase<"nonatomic", 0>;
+def AK_Atomic : I32EnumAttrCase<"atomic", 1>;
+
+def FK_Nonfreezing : I32EnumAttrCase<"nonfreezing", 0>;
+def FK_Frozen : I32EnumAttrCase<"frozen", 1>;
+def FK_Unfrozen : I32EnumAttrCase<"unfrozen", 2>;
+
+def AtomicKind : I32EnumAttr<
+    "AtomicKind",
+    "atomic kind",
+    [AK_NonAtomic, AK_Atomic]> {
+  let cppNamespace = "::mlir::reuse_ir";
+}
+
+def FreezingKind : I32EnumAttr<
+    "FreezingKind",
+    "freezing kind",
+    [FK_Nonfreezing, FK_Frozen, FK_Unfrozen]> {
+  let cppNamespace = "::mlir::reuse_ir";
+}
 
 class ReuseIR_Type<string name, string typeMnemonic, list<Trait> traits = [],
                string baseCppClass = "::mlir::Type">
@@ -87,11 +109,11 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
   }];
   let parameters = (ins
     "mlir::Type":$dataType,
-    OptionalParameter<"mlir::BoolAttr">:$atomic,
-    OptionalParameter<"mlir::BoolAttr">:$freezable
+    "::mlir::reuse_ir::AtomicKindAttr":$atomicKind,
+    "::mlir::reuse_ir::FreezingKindAttr":$freezingKind
   );
   let assemblyFormat = [{
-    `<` $dataType (`,` `atomic` `:` $atomic^ )? (`,` `freezable` `:` $freezable^ )? `>`
+    `<` $dataType `,` custom<AtomicKind>($atomicKind) `,` custom<FreezingKind>($freezingKind) `>`
   }];
 }
 
@@ -105,11 +127,13 @@ def ReuseIR_RcType : ReuseIR_Type<"Rc", "rc",
 
   let parameters = (ins
     "mlir::Type":$pointee,
-    OptionalParameter<"mlir::BoolAttr">:$atomic,
-    OptionalParameter<"mlir::BoolAttr">:$frozen
+    "::mlir::reuse_ir::AtomicKindAttr":$atomicKind,
+    "::mlir::reuse_ir::FreezingKindAttr":$freezingKind
   );
 
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    `<` $pointee `,` custom<AtomicKind>($atomicKind) `,` custom<FreezingKind>($freezingKind) `>`
+  }];
 }
 
 def ReuseIR_MRefType : ReuseIR_Type<"MRef", "mref",
@@ -122,11 +146,11 @@ def ReuseIR_MRefType : ReuseIR_Type<"MRef", "mref",
 
   let parameters = (ins
     "mlir::Type":$pointee,
-    OptionalParameter<"mlir::BoolAttr">:$atomic
+    "::mlir::reuse_ir::AtomicKindAttr":$atomicKind
   );
 
   let assemblyFormat = [{
-    `<` $pointee (`,` `atomic` `:` $atomic^ )? `>`
+    `<` $pointee `,` custom<AtomicKind>($atomicKind) `>`
   }];
 }
 
@@ -135,15 +159,17 @@ def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
 
   let summary = "ReuseIR Reference Type";
   let description = [{
-    `reuse_ir.ref` is the immutable referece to the underlying type
+    `reuse_ir.ref` is the referece to the underlying type. It serves as the pointer
+    in ReuseIR.
   }];
 
   let parameters = (ins
-    "mlir::Type":$pointee
+    "mlir::Type":$pointee,
+    "::mlir::reuse_ir::FreezingKindAttr":$freezingKind
   );
 
   let assemblyFormat = [{
-    `<` $pointee `>`
+    `<` $pointee `,` custom<FreezingKind>($freezingKind) `>`
   }];
 }
 

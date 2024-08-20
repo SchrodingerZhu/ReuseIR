@@ -2,6 +2,7 @@
 #include "ReuseIR/Common.h"
 #include "ReuseIR/IR/ReuseIRDialect.h"
 
+#include "ReuseIR/IR/ReuseIROpsEnums.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
@@ -11,6 +12,7 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/STLExtras.h"
@@ -25,6 +27,43 @@
 #include <iterator>
 #include <numeric>
 #include <string>
+
+namespace mlir {
+namespace REUSE_IR_DECL_SCOPE {
+static LogicalResult parseAtomicKind(AsmParser &parser, AtomicKindAttr &attr) {
+  std::string buffer;
+  if (parser.parseKeywordOrString(&buffer).succeeded()) {
+    if (auto kind = symbolizeAtomicKind(buffer)) {
+      attr = AtomicKindAttr::get(parser.getContext(), *kind);
+      return LogicalResult::success();
+    }
+  }
+  return parser.emitError(parser.getCurrentLocation(),
+                          "failed to parse atomic kind");
+}
+static LogicalResult parseFreezingKind(AsmParser &parser,
+                                       FreezingKindAttr &attr) {
+  std::string buffer;
+  if (parser.parseKeywordOrString(&buffer).succeeded()) {
+    if (auto kind = symbolizeFreezingKind(buffer)) {
+      attr = FreezingKindAttr::get(parser.getContext(), *kind);
+      return LogicalResult::success();
+    }
+  }
+  return parser.emitError(parser.getCurrentLocation(),
+                          "failed to parse freezing kind");
+}
+
+static void printAtomicKind(AsmPrinter &printer, const AtomicKindAttr &attr) {
+  printer.printKeywordOrString(stringifyAtomicKind(attr.getValue()));
+}
+
+static void printFreezingKind(AsmPrinter &printer,
+                              const FreezingKindAttr &attr) {
+  printer.printKeywordOrString(stringifyFreezingKind(attr.getValue()));
+}
+} // namespace REUSE_IR_DECL_SCOPE
+} // namespace mlir
 
 #define GET_TYPEDEF_CLASSES
 #include "ReuseIR/IR/ReuseIROpsTypes.cpp.inc"
@@ -205,99 +244,6 @@ TokenType::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
   return ::mlir::reuse_ir::success();
 }
 
-// RcType Parser and Printer:
-::mlir::Type RcType::parse(::mlir::AsmParser &odsParser) {
-  ::mlir::Builder odsBuilder(odsParser.getContext());
-  ::llvm::SMLoc odsLoc = odsParser.getCurrentLocation();
-  (void)odsLoc;
-  ::mlir::FailureOr<mlir::Type> _result_pointee;
-  ::mlir::FailureOr<mlir::BoolAttr> _result_atomic;
-  ::mlir::FailureOr<mlir::BoolAttr> _result_frozen;
-  // Parse literal '<'
-  if (odsParser.parseLess())
-    return {};
-
-  // Parse variable 'pointee'
-  _result_pointee = ::mlir::FieldParser<mlir::Type>::parse(odsParser);
-  if (::mlir::failed(_result_pointee)) {
-    odsParser.emitError(odsParser.getCurrentLocation(),
-                        "failed to parse ReuseIR_RcType parameter 'pointee' "
-                        "which is to be a `mlir::Type`");
-    return {};
-  }
-  while (mlir::succeeded(odsParser.parseOptionalComma())) {
-    // Parse literal ','
-
-    // Parse literal 'frozen'
-    if (mlir::succeeded(odsParser.parseOptionalKeyword("frozen"))) {
-      // Parse literal ':'
-      if (odsParser.parseColon())
-        return {};
-
-      // Parse variable 'frozen'
-      _result_frozen = ::mlir::FieldParser<mlir::BoolAttr>::parse(odsParser);
-      if (::mlir::failed(_result_frozen)) {
-        odsParser.emitError(odsParser.getCurrentLocation(),
-                            "failed to parse ReuseIR_RcType parameter 'frozen' "
-                            "which is to be a `mlir::BoolAttr`");
-        return {};
-      }
-      continue;
-    }
-
-    // Parse literal 'atomic'
-    if (mlir::succeeded(odsParser.parseOptionalKeyword("atomic"))) {
-      // Parse literal ':'
-      if (odsParser.parseColon())
-        return {};
-
-      // Parse variable 'atomic'
-      _result_atomic = ::mlir::FieldParser<mlir::BoolAttr>::parse(odsParser);
-      if (::mlir::failed(_result_atomic)) {
-        odsParser.emitError(odsParser.getCurrentLocation(),
-                            "failed to parse ReuseIR_RcType parameter 'atomic' "
-                            "which is to be a `mlir::BoolAttr`");
-        return {};
-      }
-      continue;
-    }
-    break;
-  }
-  // Parse literal '>'
-  if (odsParser.parseGreater())
-    return {};
-  assert(::mlir::succeeded(_result_pointee));
-  return RcType::get(
-      odsParser.getContext(), mlir::Type((*_result_pointee)),
-      mlir::BoolAttr((_result_atomic.value_or(mlir::BoolAttr()))),
-      mlir::BoolAttr((_result_frozen.value_or(mlir::BoolAttr()))));
-}
-
-void RcType::print(::mlir::AsmPrinter &odsPrinter) const {
-  ::mlir::Builder odsBuilder(getContext());
-  odsPrinter << "<";
-  odsPrinter.printStrippedAttrOrType(getPointee());
-  if (!(getFrozen() == mlir::BoolAttr())) {
-    odsPrinter << ",";
-    odsPrinter << ' ' << "frozen";
-    odsPrinter << ' ' << ":";
-    if (!(getFrozen() == mlir::BoolAttr())) {
-      odsPrinter << ' ';
-      odsPrinter.printStrippedAttrOrType(getFrozen());
-    }
-  }
-  if (!(getAtomic() == mlir::BoolAttr())) {
-    odsPrinter << ",";
-    odsPrinter << ' ' << "atomic";
-    odsPrinter << ' ' << ":";
-    if (!(getAtomic() == mlir::BoolAttr())) {
-      odsPrinter << ' ';
-      odsPrinter.printStrippedAttrOrType(getAtomic());
-    }
-  }
-  odsPrinter << ">";
-}
-
 // TokenType mangle
 void TokenType::formatMangledNameTo(::llvm::raw_string_ostream &buffer) const {
   buffer << "5TokenILm" << getSize() << "Elm" << getAlignment() << "EE";
@@ -323,7 +269,7 @@ RcBoxType::getCompositeLayout(::mlir::DataLayout layout) const {
   auto ptrTy = ::mlir::LLVM::LLVMPointerType::get(getContext());
   auto ptrEqSize =
       ::mlir::IntegerType::get(getContext(), layout.getTypeSizeInBits(ptrTy));
-  return (getFreezable() != ::mlir::BoolAttr() && getFreezable().getValue())
+  return getFreezingKind().getValue() != FreezingKind::nonfreezing
              ? CompositeLayout{layout, {ptrEqSize, ptrTy, ptrTy, getDataType()}}
              : CompositeLayout{layout, {ptrEqSize, getDataType()}};
 }
