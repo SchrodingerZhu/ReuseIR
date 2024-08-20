@@ -35,7 +35,7 @@ public:
   CompositeLayout(mlir::DataLayout layout, llvm::ArrayRef<mlir::Type> fields);
 
   mlir::LLVM::LLVMStructType
-  getLLVMType(mlir::LLVMTypeConverter &converter) const;
+  getLLVMType(const mlir::LLVMTypeConverter &converter) const;
 };
 } // namespace reuse_ir
 } // namespace mlir

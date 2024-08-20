@@ -1,6 +1,7 @@
 #include "ReuseIR/IR/ReuseIROps.h"
 #include "ReuseIR/IR/ReuseIROpsEnums.h"
 #include "ReuseIR/IR/ReuseIRTypes.h"
+#include "ReuseIR/Interfaces/ReuseIRCompositeLayoutInterface.h"
 #include "ReuseIR/Passes.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
@@ -20,6 +21,49 @@
 namespace mlir {
 
 namespace REUSE_IR_DECL_SCOPE {
+
+template <typename Op>
+class ReuseIRConvPatternWithLayoutCache : public mlir::OpConversionPattern<Op> {
+protected:
+  CompositeLayoutCache &cache;
+
+public:
+  template <typename... Args>
+  ReuseIRConvPatternWithLayoutCache(CompositeLayoutCache &cache, Args &&...args)
+      : mlir::OpConversionPattern<Op>(std::forward<Args>(args)...),
+        cache(cache) {}
+};
+
+class BorrowOpLowering : public ReuseIRConvPatternWithLayoutCache<BorrowOp> {
+  static inline constexpr size_t NONFREEZING_DATA_OFFSET = 1;
+  static inline constexpr size_t FREEZABLE_DATA_OFFSET = 3;
+
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      BorrowOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    RcType rcTy = op.getObject().getType();
+    RcBoxType box =
+        RcBoxType::get(getContext(), rcTy.getPointee(), rcTy.getAtomicKind(),
+                       rcTy.getFreezingKind());
+    const CompositeLayout &layout = cache.get(box);
+    mlir::LLVM::LLVMStructType structTy = layout.getLLVMType(
+        *static_cast<const LLVMTypeConverter *>(typeConverter));
+    CompositeLayout::Field targetField = layout.getField(
+        rcTy.getFreezingKind().getValue() == FreezingKind::nonfreezing
+            ? NONFREEZING_DATA_OFFSET
+            : FREEZABLE_DATA_OFFSET);
+
+    // GEP to targetField.offset.
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    rewriter.replaceOpWithNewOp<LLVM::GEPOp>(
+        op, ptrTy, structTy, adaptor.getObject(),
+        llvm::ArrayRef<LLVM::GEPArg>{0, targetField.index});
+    return mlir::reuse_ir::success();
+  }
+};
 
 class AllocOpLowering : public mlir::OpConversionPattern<AllocOp> {
 public:
@@ -155,6 +199,7 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
   patterns.add<IncOpLowering, AllocOpLowering, FreeOpLowering>(converter,
                                                                &getContext());
+  patterns.add<BorrowOpLowering>(cache, converter, &getContext());
   mlir::ConversionTarget target(getContext());
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalOp<mlir::ModuleOp>();

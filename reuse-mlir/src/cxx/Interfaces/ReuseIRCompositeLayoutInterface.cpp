@@ -26,7 +26,7 @@ CompositeLayout::CompositeLayout(mlir::DataLayout layout,
 }
 
 mlir::LLVM::LLVMStructType
-CompositeLayout::getLLVMType(mlir::LLVMTypeConverter &converter) const {
+CompositeLayout::getLLVMType(const mlir::LLVMTypeConverter &converter) const {
   llvm::SmallVector<mlir::Type> convertedTypes;
   std::transform(
       raw_fields.begin(), raw_fields.end(), std::back_inserter(convertedTypes),
