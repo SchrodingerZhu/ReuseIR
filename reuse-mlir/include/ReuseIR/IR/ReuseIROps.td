@@ -86,16 +86,21 @@ def ValueToRefOp : ReuseIR_Op<"val2ref"> {
     let summary = "Promote a value to stack and get the reference";
     let description = [{
       `reuse_ir.val2ref` is used to promote a value to an alloca on stack.
-      For composite/union/array arguments passed as values, this operation 
-      should be used at the beginning of the function.
+      For composite/union/array arguments passed as values:
+        - caller should either use `byval` ptr call convention: that is, spill the
+          value to stack pass its ref.
+        - or when the struct is small enough, the value can be directly passed to
+          target function but inorder to decompose the the object, this operaton is
+          still needed.
     }];
-    let results = (outs ReuseIR_RefType:$result);
+    let results = (outs Res<ReuseIR_RefType, "", [MemAlloc<AutomaticAllocationScopeResource>]>:$result);
     let arguments = (
         ins AnyType:$value
     );
     let assemblyFormat = [{
       $value attr-dict `:` type($value) `->` type($result)
     }];
+    let hasVerifier = 1;
 }
 
 def BorrowOp : ReuseIR_Op<"borrow"> {

@@ -1,5 +1,6 @@
 #include "ReuseIR/IR/ReuseIROps.h"
 #include "ReuseIR/Common.h"
+#include "ReuseIR/IR/ReuseIROpsEnums.h"
 #include "ReuseIR/IR/ReuseIRTypes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/OpDefinition.h"
@@ -14,10 +15,10 @@ mlir::reuse_ir::LogicalResult BorrowOp::verify() {
   RefType output = getType();
   if (input.getFreezingKind() != output.getFreezingKind())
     return emitError("the borrowed reference must have the consistent "
-                       "freezing state with the RC pointer");
+                     "freezing state with the RC pointer");
   if (input.getPointee() != output.getPointee())
     return emitError("the borrowed reference must have the consistent "
-                       "pointee type with the RC pointer");
+                     "pointee type with the RC pointer");
   return mlir::reuse_ir::success();
 }
 // IncOp
@@ -27,6 +28,16 @@ mlir::reuse_ir::LogicalResult IncOp::verify() {
     return emitOpError("cannot increase a non-frozen but freezable RC pointer");
   if (getCount() && *getCount() == 0)
     return emitError("the amount of increment must be non-zero");
+  return mlir::reuse_ir::success();
+}
+// ValueToRefOp
+mlir::reuse_ir::LogicalResult ValueToRefOp::verify() {
+  if (getResult().getType().getFreezingKind().getValue() !=
+      FreezingKind::nonfreezing)
+    return emitOpError("must return a nonfreezing reference");
+  if (getValue().getType() != getResult().getType().getPointee())
+    return emitOpError("must return a reference whose pointee is of the "
+                       "same type of the input");
   return mlir::reuse_ir::success();
 }
 // ProjOp
