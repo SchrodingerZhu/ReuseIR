@@ -6,7 +6,7 @@ pub type ParamExpr<'src> = Param<'src, Expr<'src>>;
 
 #[allow(dead_code)]
 pub struct File<'src> {
-    decls: Box<[Decl<'src, Expr<'src>>]>,
+    pub decls: Box<[Decl<'src, Expr<'src>>]>,
 }
 
 #[allow(dead_code)]

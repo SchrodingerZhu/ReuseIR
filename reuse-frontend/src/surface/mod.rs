@@ -1,11 +1,11 @@
-use chumsky::error::Cheap;
+use chumsky::error::Rich;
 use chumsky::extra::Err;
 use chumsky::prelude::just;
 use chumsky::text::ascii::keyword;
 use chumsky::text::{ident, inline_whitespace, newline};
 use chumsky::{IterParser, Parser};
 
-use crate::concrete::{Expr, ParamExpr};
+use crate::concrete::{Expr, File, ParamExpr};
 use crate::name::{IDs, Ident};
 use crate::syntax::{Decl, Def, FnDef, Param};
 
@@ -18,8 +18,10 @@ struct Surface {
     ids: IDs,
 }
 
+pub type ErrMsg<'src> = Rich<'src, char>;
+
 macro_rules! out {
-    ($o:ty) => { impl Parser<'src, &'src str, $o, Err<Cheap>> };
+    ($o:ty) => { impl Parser<'src, &'src str, $o, Err<ErrMsg<'src>>> };
 }
 
 macro_rules! primitive {
@@ -30,6 +32,16 @@ macro_rules! primitive {
 
 #[allow(dead_code)]
 impl Surface {
+    fn file<'src>(&mut self) -> out!(File<'src>) {
+        self.decl()
+            .padded()
+            .repeated()
+            .collect::<Vec<_>>()
+            .map(|decls| File {
+                decls: decls.into_boxed_slice(),
+            })
+    }
+
     fn decl<'src>(&mut self) -> out!(Decl<'src, Expr<'src>>) {
         self.fn_decl()
     }
@@ -61,8 +73,13 @@ impl Surface {
                     .delimited_by(just('('), just(')')),
             )
             .padded()
-            .then(just("->").padded().ignore_then(self.type_expr()).or_not())
-            .padded()
+            .then(
+                just("->")
+                    .padded()
+                    .ignore_then(self.type_expr())
+                    .padded()
+                    .or_not(),
+            )
             .then_ignore(just(':'))
             .padded()
             .then(self.expr())
