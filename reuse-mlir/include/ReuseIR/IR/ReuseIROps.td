@@ -110,6 +110,7 @@ def BorrowOp : ReuseIR_Op<"borrow"> {
     let assemblyFormat = [{
       $object attr-dict `:` type($object) `->` type($result)
     }];
+    let hasVerifier = 1;
 }
 
 // TODO:

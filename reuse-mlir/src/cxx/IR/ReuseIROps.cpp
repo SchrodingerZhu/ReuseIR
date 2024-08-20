@@ -8,6 +8,18 @@
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
+// BorrowOp
+mlir::reuse_ir::LogicalResult BorrowOp::verify() {
+  RcType input = getObject().getType();
+  RefType output = getType();
+  if (input.getFreezingKind() != output.getFreezingKind())
+    return emitError("the borrowed reference must have the consistent "
+                       "freezing state with the RC pointer");
+  if (input.getPointee() != output.getPointee())
+    return emitError("the borrowed reference must have the consistent "
+                       "pointee type with the RC pointer");
+  return mlir::reuse_ir::success();
+}
 // IncOp
 mlir::reuse_ir::LogicalResult IncOp::verify() {
   RcType rcPtrTy = getRcPtr().getType();
