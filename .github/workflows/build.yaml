@@ -1,0 +1,13 @@
+on: push
+jobs:
+  build:
+    strategy:
+      matrix:
+        version: [18, 19, 20]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LLVM
+        run: wget https://apt.llvm.org/llvm.sh
+             chmod +x llvm.sh
+             sudo ./llvm.sh ${{matrix.version}}
