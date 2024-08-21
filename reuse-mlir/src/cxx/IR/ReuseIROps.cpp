@@ -78,6 +78,19 @@ mlir::reuse_ir::LogicalResult ProjOp::verify() {
 
 // LoadOp
 mlir::reuse_ir::LogicalResult LoadOp::verify() {
+  RefType input = getObject().getType();
+  mlir::Type targetType{};
+  if (auto mref = dyn_cast<MRefType>(input.getPointee())) {
+    if (input.getFreezingKind().getValue() == FreezingKind::nonfreezing)
+      return emitOpError(
+          "cannot load a mutable RC pointer through a nonfreezing reference");
+    targetType = RcType::get(getContext(), mref.getPointee(),
+                             mref.getAtomicKind(), input.getFreezingKind());
+  } else
+    targetType = input.getPointee();
+  if (targetType != getType())
+    return emitOpError("expected to return a value of ")
+           << targetType << ", but " << getType() << " is found instead";
   return mlir::reuse_ir::success();
 }
 

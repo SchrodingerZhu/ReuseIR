@@ -157,7 +157,7 @@ def LoadOp : ReuseIR_Op<"load"> {
   }];
   let results = (outs AnyType:$result);
   let arguments = (
-    ins Arg<ReuseIR_RefType, "reference to the object", []>:$object
+    ins Arg<ReuseIR_RefType, "reference to the object", [MemRead]>:$object
   );
 
   let assemblyFormat = [{
