@@ -40,18 +40,36 @@ mlir::reuse_ir::LogicalResult ValueToRefOp::verify() {
                        "same type of the input");
   return mlir::reuse_ir::success();
 }
+
 // ProjOp
 mlir::reuse_ir::LogicalResult ProjOp::verify() {
-  mlir::Type innerType;
-  if (auto type = llvm::dyn_cast<RefType>(getObject().getType()))
-    innerType = type.getPointee();
+  RefType input = getObject().getType();
+  if (!isProjectable(input.getPointee()))
+    return emitOpError(
+        "must operate on a reference to a composite or an array");
+  auto targetType =
+      llvm::TypeSwitch<mlir::Type, mlir::Type>(input.getPointee())
+          .Case<CompositeType>([&](const CompositeType &ty) {
+            size_t size = ty.getMemberTypes().size();
+            return getIndex() < size ? ty.getMemberTypes()[getIndex()]
+                                     : mlir::Type{};
+          })
+          .Case<ArrayType>([&](const ArrayType &ty) {
+            if (getIndex() >= ty.getSizes()[0])
+              return mlir::Type{};
+            if (ty.getSizes().size() == 0)
+              return ty.getElementType();
+            return cast<mlir::Type>(ArrayType::get(
+                getContext(), ty.getElementType(), ty.getSizes().drop_front()));
+          })
+          .Default([](auto &&) { return mlir::Type{}; });
+  if (!targetType)
+    return emitOpError("cannot project with an out-of-bound index");
+  if (targetType != getType().getPointee())
+    return emitOpError("expected to return a reference to ")
+           << targetType << ", but found a reference to "
+           << getType().getPointee();
 
-  if (auto type = llvm::dyn_cast<RcType>(getObject().getType()))
-    innerType = type.getPointee();
-
-  innerType = innerType ? innerType : getObject().getType();
-
-  // TODO: handle verification recursively.
   return mlir::reuse_ir::success();
 }
 
