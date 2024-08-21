@@ -132,6 +132,19 @@ public:
   }
 };
 
+class LoadOpLowering : public ReuseIRConvPatternWithLayoutCache<LoadOp> {
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      LoadOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getObject(),
+        cache.getDataLayout().getTypeABIAlignment(op.getType()));
+    return mlir::reuse_ir::success();
+  }
+};
+
 class AllocOpLowering : public mlir::OpConversionPattern<AllocOp> {
 public:
   using OpConversionPattern<AllocOp>::OpConversionPattern;
@@ -266,8 +279,8 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
   patterns.add<IncOpLowering, AllocOpLowering, FreeOpLowering>(converter,
                                                                &getContext());
-  patterns.add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering>(
-      cache, converter, &getContext());
+  patterns.add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
+               LoadOpLowering>(cache, converter, &getContext());
   mlir::ConversionTarget target(getContext());
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalOp<mlir::ModuleOp>();
