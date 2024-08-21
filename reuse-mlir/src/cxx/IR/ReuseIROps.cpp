@@ -44,6 +44,9 @@ mlir::reuse_ir::LogicalResult ValueToRefOp::verify() {
 // ProjOp
 mlir::reuse_ir::LogicalResult ProjOp::verify() {
   RefType input = getObject().getType();
+  if (input.getFreezingKind() != getType().getFreezingKind())
+    return emitOpError(
+        "must return a reference with the same freezing kind as the input");
   if (!isProjectable(input.getPointee()))
     return emitOpError(
         "must operate on a reference to a composite or an array");
@@ -57,7 +60,7 @@ mlir::reuse_ir::LogicalResult ProjOp::verify() {
           .Case<ArrayType>([&](const ArrayType &ty) {
             if (getIndex() >= ty.getSizes()[0])
               return mlir::Type{};
-            if (ty.getSizes().size() == 0)
+            if (ty.getSizes().size() == 1)
               return ty.getElementType();
             return cast<mlir::Type>(ArrayType::get(
                 getContext(), ty.getElementType(), ty.getSizes().drop_front()));
