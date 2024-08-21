@@ -39,6 +39,44 @@ public:
         cache(cache) {}
 };
 
+class ProjOpLowering : public ReuseIRConvPatternWithLayoutCache<ProjOp> {
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      ProjOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    if (auto pointee =
+            dyn_cast<CompositeType>(op.getObject().getType().getPointee())) {
+      const CompositeLayout &layout = cache.get(pointee);
+      rewriter.replaceOpWithNewOp<LLVM::GEPOp>(
+          op, ptrTy, layout.getLLVMType(getLLVMTypeConverter()),
+          adaptor.getObject(),
+          llvm::ArrayRef<LLVM::GEPArg>{0,
+                                       layout.getField(op.getIndex()).index});
+      return LogicalResult::success();
+    }
+    if (auto pointee =
+            dyn_cast<ArrayType>(op.getObject().getType().getPointee())) {
+      mlir::Type innerTy;
+      if (pointee.getSizes().size() == 0)
+        innerTy = pointee.getElementType();
+      else
+        innerTy = ArrayType::get(getContext(), pointee.getElementType(),
+                                 pointee.getSizes().drop_front());
+      auto ty = typeConverter->convertType(innerTy);
+      if (!ty)
+        return LogicalResult::failure();
+      rewriter.replaceOpWithNewOp<LLVM::GEPOp>(
+          op, ptrTy, ty, adaptor.getObject(),
+          llvm::ArrayRef<LLVM::GEPArg>{op.getIndex()});
+      return LogicalResult::success();
+    }
+    return LogicalResult::failure();
+  }
+};
+
 class ValueToRefOpLowering
     : public ReuseIRConvPatternWithLayoutCache<ValueToRefOp> {
 public:
@@ -228,8 +266,8 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
   patterns.add<IncOpLowering, AllocOpLowering, FreeOpLowering>(converter,
                                                                &getContext());
-  patterns.add<BorrowOpLowering, ValueToRefOpLowering>(cache, converter,
-                                                       &getContext());
+  patterns.add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering>(
+      cache, converter, &getContext());
   mlir::ConversionTarget target(getContext());
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalOp<mlir::ModuleOp>();
