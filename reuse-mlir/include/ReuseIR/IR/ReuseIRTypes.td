@@ -254,6 +254,8 @@ def ReuseIR_CompositeType : ReuseIR_Type<"Composite", "composite",
   let assemblyFormat = [{
     `<` $memberTypes `>`
   }];
+
+  let genVerifyDecl = 1;
 }
 
 def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",

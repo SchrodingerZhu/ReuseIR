@@ -249,6 +249,21 @@ void TokenType::formatMangledNameTo(::llvm::raw_string_ostream &buffer) const {
   buffer << "5TokenILm" << getSize() << "Elm" << getAlignment() << "EE";
 }
 
+::mlir::reuse_ir::LogicalResult CompositeType::verify(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    ::llvm::ArrayRef<mlir::Type> memberTypes) {
+  for (auto type : memberTypes) {
+    if (llvm::isa<RefType>(type))
+      return emitError() << "cannot have a reference type in a composite type";
+    if (auto rcTy = llvm::dyn_cast<RcType>(type)) {
+      if (rcTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
+        return emitError() << "cannot have a non-frozen but freezable RC type "
+                              "in a composite type, use mref instead";
+    }
+  }
+  return ::mlir::reuse_ir::success();
+}
+
 void ReuseIRDialect::registerTypes() {
   (void)generatedTypePrinter;
   (void)generatedTypeParser;
