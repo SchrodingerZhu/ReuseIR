@@ -1,3 +1,4 @@
+name: Build
 on: push
 jobs:
   build:
@@ -8,6 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install LLVM
-        run: wget https://apt.llvm.org/llvm.sh
-             chmod +x llvm.sh
-             sudo ./llvm.sh ${{matrix.version}}
+        run: |
+            wget https://apt.llvm.org/llvm.sh
+            chmod +x llvm.sh
+            sudo ./llvm.sh ${{matrix.version}}
