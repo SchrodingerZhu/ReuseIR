@@ -12,4 +12,6 @@ jobs:
         run: |
             wget https://apt.llvm.org/llvm.sh
             chmod +x llvm.sh
-            sudo ./llvm.sh ${{matrix.version}}
+            sudo ./llvm.sh ${{matrix.version}} all
+            sudo apt-get install -y mlir-${{matrix.version}}-tools libmlir-${{matrix.version}}-dev
+
