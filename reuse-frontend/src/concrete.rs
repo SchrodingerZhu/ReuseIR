@@ -1,8 +1,13 @@
 use crate::name::Ident;
-use crate::syntax::{Decl, Param, Syntax};
+use crate::syntax::{Ctor, CtorParams, Decl, Param, Syntax};
 
 #[allow(dead_code)]
 pub type ParamExpr<'src> = Param<'src, Expr<'src>>;
+
+#[allow(dead_code)]
+pub type CtorExpr<'src> = Ctor<'src, Expr<'src>>;
+#[allow(dead_code)]
+pub type CtorParamsExpr<'src> = CtorParams<'src, Expr<'src>>;
 
 #[allow(dead_code)]
 pub struct File<'src> {

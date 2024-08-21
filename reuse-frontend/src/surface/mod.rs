@@ -1,13 +1,12 @@
 use chumsky::error::Rich;
 use chumsky::extra::Err;
 use chumsky::prelude::just;
-use chumsky::text::ascii::keyword;
 use chumsky::text::{ident, inline_whitespace, newline};
 use chumsky::{IterParser, Parser};
 
-use crate::concrete::{Expr, File, ParamExpr};
+use crate::concrete::{CtorExpr, CtorParamsExpr, Expr, File, ParamExpr};
 use crate::name::{IDs, Ident};
-use crate::syntax::{Decl, Def, FnDef, Param};
+use crate::syntax::{DataDef, Decl, Def, FnDef, Param};
 
 #[cfg(test)]
 mod tests;
@@ -43,35 +42,17 @@ impl Surface {
     }
 
     fn decl<'src>(&mut self) -> out!(Decl<'src, Expr<'src>>) {
-        self.fn_decl()
+        self.fn_decl().or(self.data_decl())
     }
 
     fn fn_decl<'src>(&mut self) -> out!(Decl<'src, Expr<'src>>) {
-        keyword("def")
+        just("def")
             .padded()
             .ignore_then(self.ident())
             .padded()
-            .then(
-                self.ident()
-                    .padded()
-                    .map(|name| Param {
-                        name,
-                        typ: Box::new(Expr::Type),
-                    })
-                    .separated_by(just(','))
-                    .at_least(1)
-                    .collect::<Vec<_>>()
-                    .delimited_by(just('['), just(']'))
-                    .or_not(),
-            )
+            .then(self.typ_params().or_not())
             .padded()
-            .then(
-                self.param()
-                    .padded()
-                    .separated_by(just(','))
-                    .collect::<Vec<_>>()
-                    .delimited_by(just('('), just(')')),
-            )
+            .then(self.val_params())
             .padded()
             .then(
                 just("->")
@@ -87,12 +68,87 @@ impl Surface {
             .then_ignore(newline())
             .map(|((((name, typ_params), val_params), ret), body)| Decl {
                 name,
-                typ_params: typ_params.unwrap_or_default().into_boxed_slice(),
-                val_params: val_params.into_boxed_slice(),
-                eff: Box::new(Expr::Pure), // TODO: parse effects
-                ret: ret.unwrap_or_else(|| Box::new(Expr::NoneType)),
-                def: Def::Fn(FnDef { body }),
+                def: Def::Fn(FnDef {
+                    typ_params: typ_params.unwrap_or_default(),
+                    val_params,
+                    eff: Box::new(Expr::Pure), // TODO: parse effects
+                    ret: ret.unwrap_or_else(|| Box::new(Expr::NoneType)),
+                    body,
+                }),
             })
+    }
+
+    fn data_decl<'src>(&mut self) -> out!(Decl<'src, Expr<'src>>) {
+        just("data")
+            .padded()
+            .ignore_then(self.ident())
+            .padded()
+            .then(self.typ_params().or_not())
+            .padded()
+            .then_ignore(just(':'))
+            .then_ignore(inline_whitespace())
+            .then_ignore(newline())
+            .then(self.ctors())
+            .map(|((name, typ_params), ctors)| Decl {
+                name,
+                def: Def::Data(DataDef {
+                    typ_params: typ_params.unwrap_or_default(),
+                    ctors,
+                }),
+            })
+    }
+
+    fn ctors<'src>(&mut self) -> out!(Box<[CtorExpr<'src>]>) {
+        self.ctor()
+            .padded_by(inline_whitespace())
+            .repeated()
+            .at_least(1)
+            .collect::<Vec<_>>()
+            .map(Vec::into_boxed_slice)
+    }
+
+    fn ctor<'src>(&mut self) -> out!(CtorExpr<'src>) {
+        self.ident()
+            .then_ignore(inline_whitespace())
+            .then(
+                self.ctor_unnamed_params()
+                    .or(self.ctor_named_params())
+                    .or_not()
+                    .map(Option::unwrap_or_default),
+            )
+            .then_ignore(inline_whitespace())
+            .then_ignore(newline())
+            .map(|(name, params)| CtorExpr { name, params })
+    }
+
+    fn ctor_unnamed_params<'src>(&mut self) -> out!(CtorParamsExpr<'src>) {
+        just('(')
+            .ignore_then(
+                self.type_expr()
+                    .padded()
+                    .separated_by(just(','))
+                    .allow_trailing()
+                    .at_least(1)
+                    .collect::<Vec<_>>()
+                    .map(Vec::into_boxed_slice)
+                    .map(CtorParamsExpr::Unnamed),
+            )
+            .then_ignore(just(')'))
+    }
+
+    fn ctor_named_params<'src>(&mut self) -> out!(CtorParamsExpr<'src>) {
+        just('(')
+            .ignore_then(
+                self.param()
+                    .padded()
+                    .separated_by(just(','))
+                    .allow_trailing()
+                    .at_least(1)
+                    .collect::<Vec<_>>()
+                    .map(Vec::into_boxed_slice)
+                    .map(CtorParamsExpr::Named),
+            )
+            .then_ignore(just(')'))
     }
 
     fn expr<'src>(&mut self) -> out!(Box<Expr<'src>>) {
@@ -116,6 +172,39 @@ impl Surface {
             .padded()
             .then(self.type_expr())
             .map(|(name, typ)| Param { name, typ })
+    }
+
+    fn val_params<'src>(&mut self) -> out!(Box<[ParamExpr<'src>]>) {
+        just('(')
+            .ignore_then(
+                self.param()
+                    .padded()
+                    .separated_by(just(','))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .map(Vec::into_boxed_slice)
+                    .or_not()
+                    .map(Option::unwrap_or_default),
+            )
+            .then_ignore(just(')'))
+    }
+
+    fn typ_params<'src>(&mut self) -> out!(Box<[ParamExpr<'src>]>) {
+        just('[')
+            .ignore_then(
+                self.ident()
+                    .padded()
+                    .map(|name| Param {
+                        name,
+                        typ: Box::new(Expr::Type),
+                    })
+                    .separated_by(just(','))
+                    .allow_trailing()
+                    .at_least(1)
+                    .collect::<Vec<_>>()
+                    .map(Vec::into_boxed_slice),
+            )
+            .then_ignore(just(']'))
     }
 
     fn ident<'src>(&mut self) -> out!(Ident<'src>) {

@@ -10,8 +10,13 @@ fn it_parses_file() {
 def f0 () -> None : None
 def f1 () -> None : None
 
-def f2 [T] (s: str) -> None :
+def f2 [T, U,] (s: str) -> None :
 None
+
+data
+  Foo [T]:
+    A
+B(str)
 
 
 ";

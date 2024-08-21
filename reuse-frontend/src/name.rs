@@ -11,6 +11,10 @@ impl<'src> Ident<'src> {
     pub fn new(id: ID, raw: &'src str) -> Self {
         Self { id, raw }
     }
+
+    pub fn unbound() -> Self {
+        Self { id: 0, raw: "_" }
+    }
 }
 
 impl<'src> Display for Ident<'src> {
