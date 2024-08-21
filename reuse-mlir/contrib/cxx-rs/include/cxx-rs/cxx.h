@@ -26,8 +26,7 @@ inline namespace cxxbridge1 {
 struct unsafe_bitcopy_t;
 
 namespace {
-template <typename T>
-class impl;
+template <typename T> class impl;
 }
 
 #ifndef CXXBRIDGE1_RUST_STRING
@@ -53,8 +52,8 @@ public:
   static String lossy(const char16_t *) noexcept;
   static String lossy(const char16_t *, std::size_t) noexcept;
 
-  String &operator=(const String &) &noexcept;
-  String &operator=(String &&) &noexcept;
+  String &operator=(const String &) & noexcept;
+  String &operator=(String &&) & noexcept;
 
   explicit operator std::string() const;
 
@@ -113,7 +112,7 @@ public:
   Str(const char *);
   Str(const char *, std::size_t);
 
-  Str &operator=(const Str &) &noexcept = default;
+  Str &operator=(const Str &) & noexcept = default;
 
   explicit operator std::string() const;
 
@@ -154,15 +153,13 @@ private:
 
 #ifndef CXXBRIDGE1_RUST_SLICE
 namespace detail {
-template <bool>
-struct copy_assignable_if {};
+template <bool> struct copy_assignable_if {};
 
-template <>
-struct copy_assignable_if<false> {
+template <> struct copy_assignable_if<false> {
   copy_assignable_if() noexcept = default;
   copy_assignable_if(const copy_assignable_if &) noexcept = default;
-  copy_assignable_if &operator=(const copy_assignable_if &) &noexcept = delete;
-  copy_assignable_if &operator=(copy_assignable_if &&) &noexcept = default;
+  copy_assignable_if &operator=(const copy_assignable_if &) & noexcept = delete;
+  copy_assignable_if &operator=(copy_assignable_if &&) & noexcept = default;
 };
 } // namespace detail
 
@@ -176,8 +173,8 @@ public:
   Slice() noexcept;
   Slice(T *, std::size_t count) noexcept;
 
-  Slice &operator=(const Slice<T> &) &noexcept = default;
-  Slice &operator=(Slice<T> &&) &noexcept = default;
+  Slice &operator=(const Slice<T> &) & noexcept = default;
+  Slice &operator=(Slice<T> &&) & noexcept = default;
 
   T *data() const noexcept;
   std::size_t size() const noexcept;
@@ -210,8 +207,7 @@ private:
   std::array<std::uintptr_t, 2> repr;
 };
 
-template <typename T>
-class Slice<T>::iterator final {
+template <typename T> class Slice<T>::iterator final {
 public:
   using iterator_category = std::random_access_iterator_tag;
   using value_type = T;
@@ -250,8 +246,7 @@ private:
 
 #ifndef CXXBRIDGE1_RUST_BOX
 // https://cxx.rs/binding/box.html
-template <typename T>
-class Box final {
+template <typename T> class Box final {
 public:
   using element_type = T;
   using const_pointer =
@@ -265,15 +260,14 @@ public:
   explicit Box(const T &);
   explicit Box(T &&);
 
-  Box &operator=(Box &&) &noexcept;
+  Box &operator=(Box &&) & noexcept;
 
   const T *operator->() const noexcept;
   const T &operator*() const noexcept;
   T *operator->() noexcept;
   T &operator*() noexcept;
 
-  template <typename... Fields>
-  static Box in_place(Fields &&...);
+  template <typename... Fields> static Box in_place(Fields &&...);
 
   void swap(Box &) noexcept;
 
@@ -299,8 +293,7 @@ private:
 
 #ifndef CXXBRIDGE1_RUST_VEC
 // https://cxx.rs/binding/vec.html
-template <typename T>
-class Vec final {
+template <typename T> class Vec final {
 public:
   using value_type = T;
 
@@ -310,7 +303,7 @@ public:
   Vec(Vec &&) noexcept;
   ~Vec() noexcept;
 
-  Vec &operator=(Vec &&) &noexcept;
+  Vec &operator=(Vec &&) & noexcept;
   Vec &operator=(const Vec &) &;
 
   std::size_t size() const noexcept;
@@ -332,8 +325,7 @@ public:
   void reserve(std::size_t new_cap);
   void push_back(const T &value);
   void push_back(T &&value);
-  template <typename... Args>
-  void emplace_back(Args &&...args);
+  template <typename... Args> void emplace_back(Args &&...args);
   void truncate(std::size_t len);
   void clear();
 
@@ -366,11 +358,9 @@ private:
 
 #ifndef CXXBRIDGE1_RUST_FN
 // https://cxx.rs/binding/fn.html
-template <typename Signature>
-class Fn;
+template <typename Signature> class Fn;
 
-template <typename Ret, typename... Args>
-class Fn<Ret(Args...)> final {
+template <typename Ret, typename... Args> class Fn<Ret(Args...)> final {
 public:
   Ret operator()(Args... args) const noexcept;
   Fn operator*() const noexcept;
@@ -391,7 +381,7 @@ public:
   ~Error() noexcept override;
 
   Error &operator=(const Error &) &;
-  Error &operator=(Error &&) &noexcept;
+  Error &operator=(Error &&) & noexcept;
 
   const char *what() const noexcept override;
 
@@ -426,10 +416,8 @@ public:
 };
 #endif // CXXBRIDGE1_RUST_OPAQUE
 
-template <typename T>
-std::size_t size_of();
-template <typename T>
-std::size_t align_of();
+template <typename T> std::size_t size_of();
+template <typename T> std::size_t align_of();
 
 // IsRelocatable<T> is used in assertions that a C++ type passed by value
 // between Rust and C++ is soundly relocatable by Rust.
@@ -449,8 +437,7 @@ std::size_t align_of();
 //      --- otherwise:
 //    + template <>
 //    + struct rust::IsRelocatable<MyType> : std::true_type {};
-template <typename T>
-struct IsRelocatable;
+template <typename T> struct IsRelocatable;
 
 using u8 = std::uint8_t;
 using u16 = std::uint16_t;
@@ -467,27 +454,19 @@ using f64 = double;
 // Snake case aliases for use in code that uses this style for type names.
 using string = String;
 using str = Str;
-template <typename T>
-using slice = Slice<T>;
-template <typename T>
-using box = Box<T>;
-template <typename T>
-using vec = Vec<T>;
+template <typename T> using slice = Slice<T>;
+template <typename T> using box = Box<T>;
+template <typename T> using vec = Vec<T>;
 using error = Error;
-template <typename Signature>
-using fn = Fn<Signature>;
-template <typename T>
-using is_relocatable = IsRelocatable<T>;
-
-
+template <typename Signature> using fn = Fn<Signature>;
+template <typename T> using is_relocatable = IsRelocatable<T>;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// end public API, begin implementation details
 
 #ifndef CXXBRIDGE1_PANIC
 #define CXXBRIDGE1_PANIC
-template <typename Exception>
-void panic [[noreturn]] (const char *msg);
+template <typename Exception> void panic [[noreturn]] (const char *msg);
 #endif // CXXBRIDGE1_PANIC
 
 #ifndef CXXBRIDGE1_RUST_FN
@@ -517,13 +496,11 @@ constexpr unsafe_bitcopy_t unsafe_bitcopy{};
 
 #ifndef CXXBRIDGE1_RUST_SLICE
 #define CXXBRIDGE1_RUST_SLICE
-template <typename T>
-Slice<T>::Slice() noexcept {
+template <typename T> Slice<T>::Slice() noexcept {
   sliceInit(this, reinterpret_cast<void *>(align_of<T>()), 0);
 }
 
-template <typename T>
-Slice<T>::Slice(T *s, std::size_t count) noexcept {
+template <typename T> Slice<T>::Slice(T *s, std::size_t count) noexcept {
   assert(s != nullptr || count == 0);
   sliceInit(this,
             s == nullptr && count == 0
@@ -532,49 +509,41 @@ Slice<T>::Slice(T *s, std::size_t count) noexcept {
             count);
 }
 
-template <typename T>
-T *Slice<T>::data() const noexcept {
+template <typename T> T *Slice<T>::data() const noexcept {
   return reinterpret_cast<T *>(slicePtr(this));
 }
 
-template <typename T>
-std::size_t Slice<T>::size() const noexcept {
+template <typename T> std::size_t Slice<T>::size() const noexcept {
   return sliceLen(this);
 }
 
-template <typename T>
-std::size_t Slice<T>::length() const noexcept {
+template <typename T> std::size_t Slice<T>::length() const noexcept {
   return this->size();
 }
 
-template <typename T>
-bool Slice<T>::empty() const noexcept {
+template <typename T> bool Slice<T>::empty() const noexcept {
   return this->size() == 0;
 }
 
-template <typename T>
-T &Slice<T>::operator[](std::size_t n) const noexcept {
+template <typename T> T &Slice<T>::operator[](std::size_t n) const noexcept {
   assert(n < this->size());
   auto ptr = static_cast<char *>(slicePtr(this)) + size_of<T>() * n;
   return *reinterpret_cast<T *>(ptr);
 }
 
-template <typename T>
-T &Slice<T>::at(std::size_t n) const {
+template <typename T> T &Slice<T>::at(std::size_t n) const {
   if (n >= this->size()) {
     panic<std::out_of_range>("rust::Slice index out of range");
   }
   return (*this)[n];
 }
 
-template <typename T>
-T &Slice<T>::front() const noexcept {
+template <typename T> T &Slice<T>::front() const noexcept {
   assert(!this->empty());
   return (*this)[0];
 }
 
-template <typename T>
-T &Slice<T>::back() const noexcept {
+template <typename T> T &Slice<T>::back() const noexcept {
   assert(!this->empty());
   return (*this)[this->size() - 1];
 }
@@ -708,19 +677,16 @@ typename Slice<T>::iterator Slice<T>::end() const noexcept {
   return it;
 }
 
-template <typename T>
-void Slice<T>::swap(Slice &rhs) noexcept {
+template <typename T> void Slice<T>::swap(Slice &rhs) noexcept {
   std::swap(*this, rhs);
 }
 #endif // CXXBRIDGE1_RUST_SLICE
 
 #ifndef CXXBRIDGE1_RUST_BOX
 #define CXXBRIDGE1_RUST_BOX
-template <typename T>
-class Box<T>::uninit {};
+template <typename T> class Box<T>::uninit {};
 
-template <typename T>
-class Box<T>::allocation {
+template <typename T> class Box<T>::allocation {
   static T *alloc() noexcept;
   static void dealloc(T *) noexcept;
 
@@ -734,36 +700,31 @@ public:
   T *ptr;
 };
 
-template <typename T>
-Box<T>::Box(Box &&other) noexcept : ptr(other.ptr) {
+template <typename T> Box<T>::Box(Box &&other) noexcept : ptr(other.ptr) {
   other.ptr = nullptr;
 }
 
-template <typename T>
-Box<T>::Box(const T &val) {
+template <typename T> Box<T>::Box(const T &val) {
   allocation alloc;
   ::new (alloc.ptr) T(val);
   this->ptr = alloc.ptr;
   alloc.ptr = nullptr;
 }
 
-template <typename T>
-Box<T>::Box(T &&val) {
+template <typename T> Box<T>::Box(T &&val) {
   allocation alloc;
   ::new (alloc.ptr) T(std::move(val));
   this->ptr = alloc.ptr;
   alloc.ptr = nullptr;
 }
 
-template <typename T>
-Box<T>::~Box() noexcept {
+template <typename T> Box<T>::~Box() noexcept {
   if (this->ptr) {
     this->drop();
   }
 }
 
-template <typename T>
-Box<T> &Box<T>::operator=(Box &&other) &noexcept {
+template <typename T> Box<T> &Box<T>::operator=(Box &&other) & noexcept {
   if (this->ptr) {
     this->drop();
   }
@@ -772,25 +733,17 @@ Box<T> &Box<T>::operator=(Box &&other) &noexcept {
   return *this;
 }
 
-template <typename T>
-const T *Box<T>::operator->() const noexcept {
+template <typename T> const T *Box<T>::operator->() const noexcept {
   return this->ptr;
 }
 
-template <typename T>
-const T &Box<T>::operator*() const noexcept {
+template <typename T> const T &Box<T>::operator*() const noexcept {
   return *this->ptr;
 }
 
-template <typename T>
-T *Box<T>::operator->() noexcept {
-  return this->ptr;
-}
+template <typename T> T *Box<T>::operator->() noexcept { return this->ptr; }
 
-template <typename T>
-T &Box<T>::operator*() noexcept {
-  return *this->ptr;
-}
+template <typename T> T &Box<T>::operator*() noexcept { return *this->ptr; }
 
 template <typename T>
 template <typename... Fields>
@@ -802,64 +755,52 @@ Box<T> Box<T>::in_place(Fields &&...fields) {
   return from_raw(ptr);
 }
 
-template <typename T>
-void Box<T>::swap(Box &rhs) noexcept {
+template <typename T> void Box<T>::swap(Box &rhs) noexcept {
   using std::swap;
   swap(this->ptr, rhs.ptr);
 }
 
-template <typename T>
-Box<T> Box<T>::from_raw(T *raw) noexcept {
+template <typename T> Box<T> Box<T>::from_raw(T *raw) noexcept {
   Box box = uninit{};
   box.ptr = raw;
   return box;
 }
 
-template <typename T>
-T *Box<T>::into_raw() noexcept {
+template <typename T> T *Box<T>::into_raw() noexcept {
   T *raw = this->ptr;
   this->ptr = nullptr;
   return raw;
 }
 
-template <typename T>
-Box<T>::Box(uninit) noexcept {}
+template <typename T> Box<T>::Box(uninit) noexcept {}
 #endif // CXXBRIDGE1_RUST_BOX
 
 #ifndef CXXBRIDGE1_RUST_VEC
 #define CXXBRIDGE1_RUST_VEC
-template <typename T>
-Vec<T>::Vec(std::initializer_list<T> init) : Vec{} {
+template <typename T> Vec<T>::Vec(std::initializer_list<T> init) : Vec{} {
   this->reserve_total(init.size());
   std::move(init.begin(), init.end(), std::back_inserter(*this));
 }
 
-template <typename T>
-Vec<T>::Vec(const Vec &other) : Vec() {
+template <typename T> Vec<T>::Vec(const Vec &other) : Vec() {
   this->reserve_total(other.size());
   std::copy(other.begin(), other.end(), std::back_inserter(*this));
 }
 
-template <typename T>
-Vec<T>::Vec(Vec &&other) noexcept : repr(other.repr) {
+template <typename T> Vec<T>::Vec(Vec &&other) noexcept : repr(other.repr) {
   new (&other) Vec();
 }
 
-template <typename T>
-Vec<T>::~Vec() noexcept {
-  this->drop();
-}
+template <typename T> Vec<T>::~Vec() noexcept { this->drop(); }
 
-template <typename T>
-Vec<T> &Vec<T>::operator=(Vec &&other) &noexcept {
+template <typename T> Vec<T> &Vec<T>::operator=(Vec &&other) & noexcept {
   this->drop();
   this->repr = other.repr;
   new (&other) Vec();
   return *this;
 }
 
-template <typename T>
-Vec<T> &Vec<T>::operator=(const Vec &other) & {
+template <typename T> Vec<T> &Vec<T>::operator=(const Vec &other) & {
   if (this != &other) {
     this->drop();
     new (this) Vec(other);
@@ -867,13 +808,11 @@ Vec<T> &Vec<T>::operator=(const Vec &other) & {
   return *this;
 }
 
-template <typename T>
-bool Vec<T>::empty() const noexcept {
+template <typename T> bool Vec<T>::empty() const noexcept {
   return this->size() == 0;
 }
 
-template <typename T>
-T *Vec<T>::data() noexcept {
+template <typename T> T *Vec<T>::data() noexcept {
   return const_cast<T *>(const_cast<const Vec<T> *>(this)->data());
 }
 
@@ -884,65 +823,55 @@ const T &Vec<T>::operator[](std::size_t n) const noexcept {
   return *reinterpret_cast<const T *>(data + n * size_of<T>());
 }
 
-template <typename T>
-const T &Vec<T>::at(std::size_t n) const {
+template <typename T> const T &Vec<T>::at(std::size_t n) const {
   if (n >= this->size()) {
     panic<std::out_of_range>("rust::Vec index out of range");
   }
   return (*this)[n];
 }
 
-template <typename T>
-const T &Vec<T>::front() const noexcept {
+template <typename T> const T &Vec<T>::front() const noexcept {
   assert(!this->empty());
   return (*this)[0];
 }
 
-template <typename T>
-const T &Vec<T>::back() const noexcept {
+template <typename T> const T &Vec<T>::back() const noexcept {
   assert(!this->empty());
   return (*this)[this->size() - 1];
 }
 
-template <typename T>
-T &Vec<T>::operator[](std::size_t n) noexcept {
+template <typename T> T &Vec<T>::operator[](std::size_t n) noexcept {
   assert(n < this->size());
   auto data = reinterpret_cast<char *>(this->data());
   return *reinterpret_cast<T *>(data + n * size_of<T>());
 }
 
-template <typename T>
-T &Vec<T>::at(std::size_t n) {
+template <typename T> T &Vec<T>::at(std::size_t n) {
   if (n >= this->size()) {
     panic<std::out_of_range>("rust::Vec index out of range");
   }
   return (*this)[n];
 }
 
-template <typename T>
-T &Vec<T>::front() noexcept {
+template <typename T> T &Vec<T>::front() noexcept {
   assert(!this->empty());
   return (*this)[0];
 }
 
-template <typename T>
-T &Vec<T>::back() noexcept {
+template <typename T> T &Vec<T>::back() noexcept {
   assert(!this->empty());
   return (*this)[this->size() - 1];
 }
 
-template <typename T>
-void Vec<T>::reserve(std::size_t new_cap) {
+template <typename T> void Vec<T>::reserve(std::size_t new_cap) {
   this->reserve_total(new_cap);
 }
 
-template <typename T>
-void Vec<T>::push_back(const T &value) {
+template <typename T> void Vec<T>::push_back(const T &value) {
   this->emplace_back(value);
 }
 
-template <typename T>
-void Vec<T>::push_back(T &&value) {
+template <typename T> void Vec<T>::push_back(T &&value) {
   this->emplace_back(std::move(value));
 }
 
@@ -957,18 +886,13 @@ void Vec<T>::emplace_back(Args &&...args) {
   this->set_len(size + 1);
 }
 
-template <typename T>
-void Vec<T>::clear() {
-  this->truncate(0);
-}
+template <typename T> void Vec<T>::clear() { this->truncate(0); }
 
-template <typename T>
-typename Vec<T>::iterator Vec<T>::begin() noexcept {
+template <typename T> typename Vec<T>::iterator Vec<T>::begin() noexcept {
   return Slice<T>(this->data(), this->size()).begin();
 }
 
-template <typename T>
-typename Vec<T>::iterator Vec<T>::end() noexcept {
+template <typename T> typename Vec<T>::iterator Vec<T>::end() noexcept {
   return Slice<T>(this->data(), this->size()).end();
 }
 
@@ -992,8 +916,7 @@ typename Vec<T>::const_iterator Vec<T>::cend() const noexcept {
   return Slice<const T>(this->data(), this->size()).end();
 }
 
-template <typename T>
-void Vec<T>::swap(Vec &rhs) noexcept {
+template <typename T> void Vec<T>::swap(Vec &rhs) noexcept {
   using std::swap;
   swap(this->repr, rhs.repr);
 }
@@ -1018,10 +941,8 @@ struct is_complete<T, decltype(sizeof(T))> : std::true_type {};
 #ifndef CXXBRIDGE1_LAYOUT
 #define CXXBRIDGE1_LAYOUT
 class layout {
-  template <typename T>
-  friend std::size_t size_of();
-  template <typename T>
-  friend std::size_t align_of();
+  template <typename T> friend std::size_t size_of();
+  template <typename T> friend std::size_t align_of();
   template <typename T>
   static typename std::enable_if<std::is_base_of<Opaque, T>::value,
                                  std::size_t>::type
@@ -1060,27 +981,19 @@ class layout {
   }
 };
 
-template <typename T>
-std::size_t size_of() {
-  return layout::size_of<T>();
-}
+template <typename T> std::size_t size_of() { return layout::size_of<T>(); }
 
-template <typename T>
-std::size_t align_of() {
-  return layout::align_of<T>();
-}
+template <typename T> std::size_t align_of() { return layout::align_of<T>(); }
 #endif // CXXBRIDGE1_LAYOUT
 
 #ifndef CXXBRIDGE1_RELOCATABLE
 #define CXXBRIDGE1_RELOCATABLE
 namespace detail {
-template <typename... Ts>
-struct make_void {
+template <typename... Ts> struct make_void {
   using type = void;
 };
 
-template <typename... Ts>
-using void_t = typename make_void<Ts...>::type;
+template <typename... Ts> using void_t = typename make_void<Ts...>::type;
 
 template <typename Void, template <typename...> class, typename...>
 struct detect : std::false_type {};
@@ -1090,8 +1003,7 @@ struct detect<void_t<T<A...>>, T, A...> : std::true_type {};
 template <template <typename...> class T, typename... A>
 using is_detected = detect<void, T, A...>;
 
-template <typename T>
-using detect_IsRelocatable = typename T::IsRelocatable;
+template <typename T> using detect_IsRelocatable = typename T::IsRelocatable;
 
 template <typename T>
 struct get_IsRelocatable

@@ -1,0 +1,42 @@
+name: Build
+on: [push, pull_request]
+jobs:
+  build:
+    strategy:
+      matrix:
+        version: [18, 19, 20]
+    env:
+      RUSTFLAGS: "-Dwarnings"
+      MLIR_DIR: /usr/lib/llvm-${{matrix.version}}/lib/cmake/mlir/
+      LLVM_DIR: /usr/lib/llvm-${{matrix.version}}/
+      CXX: /usr/lib/llvm-${{matrix.version}}/bin/clang++
+      CC:  /usr/lib/llvm-${{matrix.version}}/bin/clang
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LLVM
+        run: |
+            wget https://apt.llvm.org/llvm.sh
+            chmod +x llvm.sh
+            sudo ./llvm.sh ${{matrix.version}} all
+            sudo apt-get install -y mlir-${{matrix.version}}-tools libmlir-${{matrix.version}}-dev ninja-build cmake
+      - name: Install LLVM Lit
+        run: |
+            pip install lit
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy, rustfmt
+      - name: ReuseIR Check
+        run: |
+            cmake -S reuse-mlir -B build -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+            cmake --build build --target check --parallel
+      - name: Run Clippy
+        run: cargo clippy
+      - name: Run RustFmt
+        run: cargo fmt --check
+      - name: Run Rust Test
+        run: cargo test
+
+
+
