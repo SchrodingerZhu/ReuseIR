@@ -87,7 +87,6 @@ public:
       mlir::ConversionPatternRewriter &rewriter) const override final {
     uint64_t alignment = cache.getDataLayout().getTypePreferredAlignment(
         op.getValue().getType());
-    alignment = std::max(cache.getDataLayout().getStackAlignment(), alignment);
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto alloca = rewriter.create<mlir::LLVM::AllocaOp>(
         op->getLoc(), ptrTy, adaptor.getValue().getType(),
