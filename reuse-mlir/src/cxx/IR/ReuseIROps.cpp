@@ -55,6 +55,11 @@ mlir::reuse_ir::LogicalResult ProjOp::verify() {
   return mlir::reuse_ir::success();
 }
 
+// LoadOp
+mlir::reuse_ir::LogicalResult LoadOp::verify() {
+  return mlir::reuse_ir::success();
+}
+
 template <StringLiteral Literal> struct ParseKeywordAsUnitAttr {
   OptionalParseResult operator()(OpAsmParser &parser, UnitAttr &attr) {
     if (parser.parseOptionalKeyword(Literal).succeeded())
@@ -69,9 +74,6 @@ template <StringLiteral Literal> struct PrintKeywordAsUnitAttr {
       printer.printKeywordOrString(Literal);
   }
 };
-
-static ParseKeywordAsUnitAttr<"as_reference"_str> parseAsReferenceAttr;
-static PrintKeywordAsUnitAttr<"as_reference"_str> printAsReferenceAttr;
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 

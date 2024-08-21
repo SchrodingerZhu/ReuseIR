@@ -25,16 +25,10 @@ module @test {
         %1 = reuse_ir.borrow %0 : 
             !reuse_ir.rc<!test, nonatomic, nonfreezing>
             -> !reuse_ir.ref<!test, nonfreezing>
-        %2 = reuse_ir.proj %1[0, 1] : 
-            !reuse_ir.ref<!test, nonfreezing> -> i32
-        return
-    }
-    func.func @projection_ref(%0: !reuse_ir.rc<!test, nonatomic, nonfreezing>) {
-        %1 = reuse_ir.borrow %0 : 
-            !reuse_ir.rc<!test, nonatomic, nonfreezing>
-            -> !reuse_ir.ref<!test, nonfreezing>
-        %2 = reuse_ir.proj as_reference %1[0, 1] : 
+        %2 = reuse_ir.proj %1[0] : 
             !reuse_ir.ref<!test, nonfreezing> -> !reuse_ir.ref<!reuse_ir.composite<i32, i32>, nonfreezing>
+        %3 = reuse_ir.proj %2[1] : 
+            !reuse_ir.ref<!reuse_ir.composite<i32, i32>, nonfreezing> -> !reuse_ir.ref<i32, nonfreezing> 
         return
     }
 }
