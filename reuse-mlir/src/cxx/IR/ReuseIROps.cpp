@@ -6,6 +6,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <algorithm>
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
@@ -93,6 +94,45 @@ mlir::reuse_ir::LogicalResult LoadOp::verify() {
   if (targetType != getType())
     return emitOpError("expected to return a value of ")
            << targetType << ", but " << getType() << " is found instead";
+  return mlir::reuse_ir::success();
+}
+
+// ClosureNewOp
+ClosureType ClosureNewOp::getClosureType() {
+  return llvm::TypeSwitch<mlir::Type, ClosureType>(getClosure().getType())
+      .Case<RcType>(
+          [](const RcType &ty) { return cast<ClosureType>(ty.getPointee()); })
+      .Default([](const mlir::Type &ty) { return cast<ClosureType>(ty); });
+}
+
+mlir::reuse_ir::LogicalResult ClosureNewOp::verify() {
+  Region *region = &getRegion();
+  ClosureType closureTy = getClosureType();
+  if (region->getArguments().size() != closureTy.getInputTypes().size())
+    return emitOpError("the number of arguments in the region must match the "
+                       "number of input types in the closure type");
+  if (std::any_of(region->getArguments().begin(), region->getArguments().end(),
+                  [&](BlockArgument arg) {
+                    return arg.getType() !=
+                           closureTy.getInputTypes()[arg.getArgNumber()];
+                  }))
+    return emitOpError("the types of arguments in the region must match the "
+                       "input types in the closure type");
+  return mlir::reuse_ir::success();
+}
+
+// ClosureYieldOp
+mlir::reuse_ir::LogicalResult ClosureYieldOp::verify() {
+  ClosureNewOp op = getParentOp();
+  ClosureType closureTy = op.getClosureType();
+  if (getValue() && !closureTy.getOutputType())
+    return emitOpError("cannot yield a value in a closure without output");
+  if (!getValue() && closureTy.getOutputType())
+    return emitOpError("must yield a value in a closure with output");
+  if (getValue().getType() != closureTy.getOutputType())
+    return emitOpError("expected to yield a value of ")
+           << closureTy.getOutputType() << ", but " << getValue().getType()
+           << " is found instead";
   return mlir::reuse_ir::success();
 }
 

@@ -189,38 +189,41 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
   let hasVerifier = 0;
 }
 
-def NewClosureOp : ReuseIR_Op<"new_closure"> {
+def ClosureNewOp : ReuseIR_Op<"closure.new"> {
   let summary = "Create a new closure";
   let description = [{
-    `reuse_ir.new_closure` creates a new closure object. 
+    `reuse_ir.closure.new` creates a new closure object. 
     The closure can either be a value or wrapped in a rc pointer.
     The closure shall not capture mutable references (for now).
   }];
   let results = (outs Res<AnyTypeOf<[ReuseIR_RcTypeOf<[ReuseIR_ClosureType]>, ReuseIR_ClosureType]>, 
-    "Closure Object", [MemAlloc<DefaultResource>]>:$result);
+    "Closure Object", [MemAlloc<DefaultResource>]>:$closure);
   let regions = (region MinSizedRegion<1>:$body);
   let assemblyFormat = [{
-    $body `:` type($result) attr-dict
+    $body `:` type($closure) attr-dict
+  }];
+  let extraClassDeclaration = [{
+    ::mlir::reuse_ir::ClosureType getClosureType();
   }];
   // TODO: add verifier
-  let hasVerifier = 0;
+  let hasVerifier = 1;
 }
 
 def ClosureYieldOp : ReuseIR_Op<"closure.yield", [ReturnLike, Terminator,
-    ParentOneOf<["::mlir::reuse_ir::NewClosureOp"]>]> {
+    ParentOneOf<["::mlir::reuse_ir::ClosureNewOp"]>]> {
   let summary = "Yield closure return value";
   let description = [{
     `closure.yield` yields the return value of the closure.
     This serves as the terminator of the closure body.
   }];
 
-  let arguments = (ins AnyType:$value);
+  let arguments = (ins Optional<AnyType>:$value);
 
   let assemblyFormat = [{
-    $value `:` type($value) attr-dict
+   ($value^ `:` type($value))? attr-dict
   }];
   
   // TODO: add verifier
-  let hasVerifier = 0;
+  let hasVerifier = 1;
 }
 #endif // REUSE_IR_OPS
