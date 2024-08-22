@@ -15,7 +15,8 @@ CompositeLayout::CompositeLayout(mlir::DataLayout layout,
     llvm::TypeSize alignedSize = llvm::alignTo(size, typeAlign);
     if (alignedSize > size)
       raw_fields.emplace_back(alignedSize - size);
-    field_map.insert({index, {raw_fields.size(), llvm::Align{typeAlign}}});
+    field_map.insert(
+        {index, {raw_fields.size(), alignedSize, llvm::Align{typeAlign}}});
     raw_fields.emplace_back(type);
     size = alignedSize + typeSz;
   }

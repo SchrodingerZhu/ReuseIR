@@ -17,6 +17,7 @@ public:
   using FieldKind = std::variant<mlir::Type, size_t>;
   struct Field {
     size_t index;
+    size_t byteOffset;
     llvm::Align alignment;
   };
 

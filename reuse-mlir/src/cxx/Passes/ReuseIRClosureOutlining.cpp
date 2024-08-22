@@ -27,9 +27,41 @@ namespace mlir {
 
 namespace REUSE_IR_DECL_SCOPE {
 
-struct ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
+class ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
   llvm::DenseMap<llvm::StringRef, size_t> &assignedLambda;
   DataLayout dataLayout;
+
+  void emitOutlinedFunc(ClosureNewOp op, PatternRewriter &rewriter,
+                        func::FuncOp lambdaFuncOp, RefType argPackRefTy,
+                        FreezingKindAttr nonfreezing) const {
+    mlir::OpBuilder::InsertionGuard guard(rewriter);
+    Block *funcOpBlock = rewriter.createBlock(&lambdaFuncOp.getFunctionBody());
+    auto arg = funcOpBlock->addArgument(argPackRefTy, op.getLoc());
+    rewriter.setInsertionPointToStart(funcOpBlock);
+    llvm::SmallVector<Value> args;
+    std::transform(
+        op->getRegion(0).args_begin(), op->getRegion(0).args_end(),
+        std::back_inserter(args), [&](const mlir::BlockArgument &innerArg) {
+          mlir::Value ref = rewriter.create<ProjOp>(
+              op->getLoc(),
+              RefType::get(getContext(), innerArg.getType(), nonfreezing), arg,
+              innerArg.getArgNumber());
+          mlir::Value loaded =
+              rewriter.create<LoadOp>(op->getLoc(), innerArg.getType(), ref);
+          return loaded;
+        });
+    rewriter.inlineBlockBefore(&op->getRegion(0).front(), funcOpBlock,
+                               funcOpBlock->end(), args);
+    funcOpBlock->walk([&](ClosureYieldOp yieldOp) {
+      rewriter.replaceOpWithNewOp<func::ReturnOp>(yieldOp,
+                                                  yieldOp.getOperands());
+    });
+    rewriter.inlineRegionBefore(op->getRegion(0),
+                                lambdaFuncOp.getFunctionBody(),
+                                lambdaFuncOp.getFunctionBody().end());
+  }
+
+public:
   template <typename... Args>
   ReuseIRClosureOutliningPattern(
       llvm::DenseMap<llvm::StringRef, size_t> &assignedLambda,
@@ -66,8 +98,10 @@ struct ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
     std::string lambdaVtableName = (lambdaName + llvm::Twine("$$vtable")).str();
     auto funcTy = FunctionType::get(getContext(), argPackRefTy,
                                     op.getClosureType().getOutputType());
-    auto cloneTy = FunctionType::get(getContext(), argPackRefTy, argPackRefTy);
-    auto dropTy = FunctionType::get(getContext(), argPackRefTy, {});
+    auto cloneTy = FunctionType::get(
+        getContext(), {argPackRefTy, rewriter.getIndexType()}, argPackRefTy);
+    auto dropTy = FunctionType::get(
+        getContext(), {argPackRefTy, rewriter.getIndexType()}, {});
     rewriter.setInsertionPoint(funcOp);
     auto lambdaFuncOp =
         rewriter.create<func::FuncOp>(op->getLoc(), lambdaFuncName, funcTy);
@@ -75,41 +109,11 @@ struct ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
         rewriter.create<func::FuncOp>(op->getLoc(), lambdaCloneName, cloneTy);
     auto lambdaDropOp =
         rewriter.create<func::FuncOp>(op->getLoc(), lambdaDropName, dropTy);
-    // TODO: for now, we only declare the function, we will emit them later
     lambdaFuncOp.setPrivate();
     lambdaCloneOp.setPrivate();
     lambdaDropOp.setPrivate();
-    {
-      mlir::OpBuilder::InsertionGuard guard(rewriter);
-      auto funcOpBlock = rewriter.createBlock(&lambdaFuncOp.getFunctionBody());
-      auto arg = funcOpBlock->addArgument(argPackRefTy, op.getLoc());
-      rewriter.setInsertionPointToStart(funcOpBlock);
-      llvm::SmallVector<Value> args;
-      std::transform(
-          op->getRegion(0).args_begin(), op->getRegion(0).args_end(),
-          std::back_inserter(args), [&](const mlir::BlockArgument &innerArg) {
-            mlir::Value ref =
-                rewriter
-                    .create<ProjOp>(op->getLoc(),
-                                    RefType::get(getContext(),
-                                                 innerArg.getType(),
-                                                 nonfreezing),
-                                    arg, innerArg.getArgNumber())
-                    ->getOpResult(0);
-            mlir::Value loaded =
-                rewriter.create<LoadOp>(op->getLoc(), innerArg.getType(), ref);
-            return loaded;
-          });
-      rewriter.inlineBlockBefore(&op->getRegion(0).front(), funcOpBlock,
-                                 funcOpBlock->end(), args);
-      funcOpBlock->walk([&](ClosureYieldOp yieldOp) {
-        rewriter.replaceOpWithNewOp<func::ReturnOp>(yieldOp,
-                                                    yieldOp.getOperands());
-      });
-      rewriter.inlineRegionBefore(op->getRegion(0),
-                                  lambdaFuncOp.getFunctionBody(),
-                                  lambdaFuncOp.getFunctionBody().end());
-    }
+    emitOutlinedFunc(op, rewriter, lambdaFuncOp, argPackRefTy, nonfreezing);
+    // TODO: emit clone and drop functions
     rewriter.create<ClosureVTableOp>(op->getLoc(), lambdaVtableName,
                                      op.getClosureType(), lambdaFuncName,
                                      lambdaCloneName, lambdaDropName);
