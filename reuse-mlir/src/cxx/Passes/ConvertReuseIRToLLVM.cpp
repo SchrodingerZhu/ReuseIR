@@ -15,8 +15,8 @@
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LLVM.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <llvm-20/llvm/ADT/StringRef.h>
 #include <memory>
 #include <numeric>
 #include <optional>
