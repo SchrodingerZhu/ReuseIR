@@ -13,9 +13,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::reuse_ir::ReuseIRDialect>();
   mlir::registerAllExtensions(registry);
   mlir::registerAllPasses();
-  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-    return mlir::reuse_ir::createConvertReuseIRToLLVMPass();
-  });
+  mlir::reuse_ir::registerReuseIRPasses();
   return failed(mlir::MlirOptMain(
       argc, argv, "ReuseIR analysis and optimization driver\n", registry));
 }

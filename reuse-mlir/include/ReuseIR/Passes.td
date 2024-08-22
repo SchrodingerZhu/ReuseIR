@@ -11,8 +11,17 @@ def ConvertReuseIRToLLVM : Pass<"convert-reuse-ir-to-llvm", "::mlir::ModuleOp"> 
     ```
 
   }];
-  let constructor = "mlir::createConvertReuseIRToLLVMPass()";
+  let constructor = "::mlir::reuse_ir::createConvertReuseIRToLLVMPass()";
   let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect", "::mlir::LLVM::LLVMDialect"];
+}
+
+def ReuseIRClosureOutlining : Pass<"reuse-ir-closure-outlining", "::mlir::ModuleOp"> {
+  let summary = "Outlines ReuseIR Closures";
+  let description = [{
+    This pass outlines closures and instantiates their virtual tables.
+  }];
+  let constructor = "::mlir::reuse_ir::createReuseIRClosureOutliningPass()";
+  let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
 }
 
 #endif // REUSE_IR_PASSES
