@@ -1,5 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
+use std::ptr::NonNull;
+
 use smallvec::SmallVec;
 
 const STATUS_COUNTER_PADDING_BITS: usize = 2;
@@ -43,8 +45,8 @@ impl FreezingStatus {
     pub fn get_value(self) -> usize {
         unsafe { (self.scalar & (isize::MAX as usize)) >> 2 }
     }
-    pub fn get_pointer(self) -> *mut FreezableRcBoxHeader {
-        unsafe { self.ptr }
+    pub unsafe fn get_pointer_unchecked(self) -> NonNull<FreezableRcBoxHeader> {
+        unsafe { NonNull::new_unchecked(self.ptr) }
     }
     pub fn unmarked() -> Self {
         Self { scalar: 0 }
@@ -90,76 +92,81 @@ pub struct FreezableRcBoxHeader {
 
 struct FieldIterator {
     slice_iter: std::slice::Iter<'static, usize>,
-    base_pointer: *mut u8,
+    base_pointer: NonNull<u8>,
 }
 
 impl FieldIterator {
-    unsafe fn new(base_pointer: *mut FreezableRcBoxHeader) -> Self {
-        let vtable = (*base_pointer).vtable;
+    unsafe fn new(base_pointer: NonNull<FreezableRcBoxHeader>) -> Self {
+        let vtable = base_pointer.as_ref().vtable;
         let slice =
             std::slice::from_raw_parts((*vtable).scan_offset.as_ptr(), (*vtable).scan_count);
         Self {
             slice_iter: slice.iter(),
-            base_pointer: base_pointer as _,
+            base_pointer: base_pointer.cast(),
         }
     }
 }
 
 impl Iterator for FieldIterator {
-    type Item = *mut FreezableRcBoxHeader;
+    type Item = Option<NonNull<FreezableRcBoxHeader>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.slice_iter.next().map(|offset| unsafe {
-            let pointer = self.base_pointer.byte_add(*offset) as *mut *mut FreezableRcBoxHeader;
-            *pointer
+            let pointer = self
+                .base_pointer
+                .byte_add(*offset)
+                .cast::<*mut FreezableRcBoxHeader>();
+            NonNull::new(pointer.read())
         })
     }
 }
 
-unsafe fn increase_refcnt(object: *mut FreezableRcBoxHeader, count: usize) {
-    (*object).status.scalar += count << STATUS_COUNTER_PADDING_BITS;
+unsafe fn increase_refcnt(mut object: NonNull<FreezableRcBoxHeader>, count: usize) {
+    object.as_mut().status.scalar += count << STATUS_COUNTER_PADDING_BITS;
 }
 
-unsafe fn decrease_refcnt(object: *mut FreezableRcBoxHeader, count: usize) -> bool {
-    (*object).status.scalar -= count << STATUS_COUNTER_PADDING_BITS;
-    (*object).status.scalar <= (isize::MIN as usize | 0b11)
+unsafe fn decrease_refcnt(mut object: NonNull<FreezableRcBoxHeader>, count: usize) -> bool {
+    object.as_mut().status.scalar -= count << STATUS_COUNTER_PADDING_BITS;
+    object.as_mut().status.scalar <= (isize::MIN as usize | 0b11)
 }
 
-unsafe fn find_representative(mut object: *mut FreezableRcBoxHeader) -> *mut FreezableRcBoxHeader {
+unsafe fn find_representative(
+    mut object: NonNull<FreezableRcBoxHeader>,
+) -> NonNull<FreezableRcBoxHeader> {
     let mut root = object;
-    while (*root).status.get_kind() == StatusKind::Representative {
-        root = (*root).status.get_pointer();
+    while root.as_ref().status.get_kind() == StatusKind::Representative {
+        root = root.as_ref().status.get_pointer_unchecked();
     }
-    while (*object).status.get_kind() == StatusKind::Representative {
-        let next = (*object).status.get_pointer();
-        (*object).status = FreezingStatus::representative(root);
+    while object.as_ref().status.get_kind() == StatusKind::Representative {
+        let next = object.as_ref().status.get_pointer_unchecked();
+        object.as_mut().status = FreezingStatus::representative(root.as_ptr());
         object = next;
     }
     root
 }
 
-unsafe fn union(x: *mut FreezableRcBoxHeader, y: *mut FreezableRcBoxHeader) -> bool {
+unsafe fn union(x: NonNull<FreezableRcBoxHeader>, y: NonNull<FreezableRcBoxHeader>) -> bool {
     let mut rep_x = find_representative(x);
     let mut rep_y = find_representative(y);
     if rep_x == rep_y {
         return false;
     }
-    if (*rep_x).status.get_value() < (*rep_y).status.get_value() {
+    if rep_x.as_ref().status.get_value() < rep_y.as_ref().status.get_value() {
         std::mem::swap(&mut rep_x, &mut rep_y);
     }
-    if (*rep_x).status.get_value() == (*rep_y).status.get_value() {
-        (*rep_x).status = FreezingStatus::rank((*rep_x).status.get_value() + 1);
+    if rep_x.as_ref().status.get_value() == rep_y.as_ref().status.get_value() {
+        rep_x.as_mut().status = FreezingStatus::rank(rep_x.as_ref().status.get_value() + 1);
     }
-    (*rep_y).status = FreezingStatus::representative(rep_x);
+    rep_y.as_mut().status = FreezingStatus::representative(rep_x.as_ptr());
     true
 }
 
 #[cold]
-unsafe fn dispose(object: *mut FreezableRcBoxHeader) {
-    type Stack = SmallVec<[*mut FreezableRcBoxHeader; 16]>;
-    unsafe fn add_stack(stack: &mut Stack, object: *mut FreezableRcBoxHeader) {
+unsafe fn dispose(object: NonNull<FreezableRcBoxHeader>) {
+    type Stack = SmallVec<[NonNull<FreezableRcBoxHeader>; 16]>;
+    unsafe fn add_stack(stack: &mut Stack, mut object: NonNull<FreezableRcBoxHeader>) {
         stack.push(object);
-        (*object).status = FreezingStatus::disposing();
+        object.as_mut().status = FreezingStatus::disposing();
     }
     let mut dfs = Stack::new();
     let mut scc = Stack::new();
@@ -169,9 +176,9 @@ unsafe fn dispose(object: *mut FreezableRcBoxHeader) {
         scc.push(obj);
         while let Some(obj) = scc.pop() {
             recycle.push(obj);
-            for field in FieldIterator::new(obj) {
+            for field in FieldIterator::new(obj).flatten() {
                 let next = find_representative(field);
-                match (*next).status.get_kind() {
+                match next.as_ref().status.get_kind() {
                     StatusKind::Disposing if field != next => add_stack(&mut scc, field),
                     StatusKind::Rc if decrease_refcnt(next, 1) => add_stack(&mut dfs, next),
                     _ => continue,
@@ -181,21 +188,28 @@ unsafe fn dispose(object: *mut FreezableRcBoxHeader) {
     }
     stacker::maybe_grow(16 * 1024, 1024 * 1024, || {
         while let Some(obj) = recycle.pop() {
-            let vtable = (*obj).vtable;
+            let vtable = obj.as_ref().vtable;
             if let Some(dtor) = (*vtable).drop {
-                dtor(obj);
+                dtor(obj.as_ptr());
             }
-            crate::allocator::__reuse_ir_dealloc(obj as _, (*vtable).size, (*vtable).alignment);
+            crate::allocator::__reuse_ir_dealloc(
+                obj.cast().as_ptr(),
+                (*vtable).size,
+                (*vtable).alignment,
+            );
         }
     });
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn __reuse_ir_freeze(object: *mut FreezableRcBoxHeader) {
-    type PendingList = SmallVec<[*mut FreezableRcBoxHeader; 32]>;
+    let Some(object) = NonNull::new(object) else {
+        panic!("attempt to freeze null object");
+    };
+    type PendingList = SmallVec<[NonNull<FreezableRcBoxHeader>; 32]>;
     let mut pending = PendingList::new();
-    unsafe fn freeze(object: *mut FreezableRcBoxHeader, pending: &mut PendingList) {
-        match (*object).status.get_kind() {
+    unsafe fn freeze(mut object: NonNull<FreezableRcBoxHeader>, pending: &mut PendingList) {
+        match object.as_ref().status.get_kind() {
             StatusKind::Rc => {
                 let root = find_representative(object);
                 increase_refcnt(root, 1);
@@ -209,11 +223,11 @@ pub unsafe extern "C" fn __reuse_ir_freeze(object: *mut FreezableRcBoxHeader) {
                 }
             },
             StatusKind::Unmarked => {
-                (*object).status = FreezingStatus::rc(1);
+                object.as_mut().status = FreezingStatus::rc(1);
                 pending.push(object);
                 stacker::maybe_grow(16 * 1024, 1024 * 1024, || {
                     let iter = FieldIterator::new(object);
-                    for field in iter {
+                    for field in iter.flatten() {
                         freeze(field, pending);
                     }
                 });
@@ -234,6 +248,9 @@ pub unsafe extern "C" fn __reuse_ir_acquire_freezable(
     object: *mut FreezableRcBoxHeader,
     count: usize,
 ) {
+    let Some(object) = NonNull::new(object) else {
+        panic!("attempt to acquire null object");
+    };
     let root = find_representative(object);
     increase_refcnt(root, count);
 }
@@ -243,8 +260,12 @@ pub unsafe extern "C" fn __reuse_ir_release_freezable(
     object: *mut FreezableRcBoxHeader,
     count: usize,
 ) {
-    if decrease_refcnt(object, count) {
-        dispose(object)
+    if let Some(object) = NonNull::new(object) {
+        if decrease_refcnt(object, count) {
+            dispose(object);
+        }
+    } else {
+        panic!("attempt to release null object");
     }
 }
 
