@@ -68,6 +68,21 @@ def ReuseIR_RegionCtxType : ReuseIR_Type<"RegionCtx", "region_ctx",
   }];
 }
 
+def ReuseIR_NullableType : ReuseIR_Type<"Nullable", "nullable",
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+  let summary = "ReuseIR Nullable Type";
+  let description = [{
+    `reuse_ir.nullable` is a nullable type. Rc pointers on default at nonnull in ReuseIR.
+    This is just a type wrapper to indicate that the pointer can be null.
+  }];
+  let parameters = (ins
+    "::mlir::reuse_ir::RcType":$pointer
+  );
+  let assemblyFormat = [{
+    `<` $pointer `>`
+  }];
+}
+
 def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
     [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
   let summary = "ReuseIR Control Box";

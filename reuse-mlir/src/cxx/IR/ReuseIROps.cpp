@@ -84,8 +84,10 @@ mlir::reuse_ir::LogicalResult LoadOp::verify() {
     if (input.getFreezingKind().getValue() == FreezingKind::nonfreezing)
       return emitOpError(
           "cannot load a mutable RC pointer through a nonfreezing reference");
-    targetType = RcType::get(getContext(), mref.getPointee(),
-                             mref.getAtomicKind(), input.getFreezingKind());
+    targetType = NullableType::get(getContext(),
+                                   RcType::get(getContext(), mref.getPointee(),
+                                               mref.getAtomicKind(),
+                                               input.getFreezingKind()));
   } else
     targetType = input.getPointee();
   if (targetType != getType())
