@@ -198,9 +198,10 @@ def ClosureNewOp : ReuseIR_Op<"closure.new"> {
   }];
   let results = (outs Res<AnyTypeOf<[ReuseIR_RcTypeOf<[ReuseIR_ClosureType]>, ReuseIR_ClosureType]>, 
     "Closure Object", [MemAlloc<DefaultResource>]>:$closure);
-  let regions = (region MinSizedRegion<1>:$body);
+  let regions = (region VariadicRegion<MinSizedRegion<1>>:$body);
+  let arguments = (ins OptionalAttr<SymbolRefAttr>:$vtable);
   let assemblyFormat = [{
-    $body `:` type($closure) attr-dict
+    ($body^)? ($vtable^)? `:` type($closure) attr-dict
   }];
   let extraClassDeclaration = [{
     ::mlir::reuse_ir::ClosureType getClosureType();
@@ -225,5 +226,25 @@ def ClosureYieldOp : ReuseIR_Op<"closure.yield", [ReturnLike, Terminator,
   
   // TODO: add verifier
   let hasVerifier = 1;
+}
+
+def ClosureVTableOp : ReuseIR_Op<"closure.vtable"> {
+  let summary = "Define a closure vtable";
+  let description = [{
+    `closure.vtable` defines a vtable for the closure.
+    The vtable is a list of function pointers.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$name, TypeAttr:$closureType, SymbolNameAttr:$func, SymbolNameAttr:$clone, SymbolNameAttr:$drop);
+
+  let assemblyFormat = [{
+    attr-dict $name `{` 
+      `closure_type` `:` $closureType `,`
+      `func` `:` $func `,`
+      `clone` `:` $clone `,`
+      `drop` `:` $drop
+    `}` 
+  }];
+  
 }
 #endif // REUSE_IR_OPS

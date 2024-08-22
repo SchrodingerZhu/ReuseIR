@@ -5,6 +5,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
 
@@ -106,7 +107,16 @@ ClosureType ClosureNewOp::getClosureType() {
 }
 
 mlir::reuse_ir::LogicalResult ClosureNewOp::verify() {
-  Region *region = &getRegion();
+  if (getNumRegions() > 1)
+    return emitOpError("cannot have more than one region");
+  if (getNumRegions() > 0 && getVtable())
+    return emitOpError("cannot have both a region and a vtable");
+  if (auto sym = *getVtable()) {
+    // TODO: Check if the symbol is a vtable
+    (void)SymbolTable::lookupNearestSymbolFrom(*this, sym);
+    return mlir::reuse_ir::success();
+  }
+  Region *region = &getRegion(0);
   ClosureType closureTy = getClosureType();
   if (region->getArguments().size() != closureTy.getInputTypes().size())
     return emitOpError("the number of arguments in the region must match the "
