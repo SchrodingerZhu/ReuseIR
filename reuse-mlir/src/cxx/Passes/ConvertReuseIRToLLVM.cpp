@@ -331,7 +331,6 @@ static void emitRuntimeFunctions(mlir::Location loc,
       builder.getStringAttr("private"), nullptr, nullptr);
   dealloc.setArgAttr(0, "llvm.allocptr", builder.getUnitAttr());
   dealloc.setArgAttr(2, "llvm.allocalign", builder.getUnitAttr());
-  alloc->setAttr("llvm.allockind", builder.getStringAttr("free"));
   auto realloc = builder.create<mlir::func::FuncOp>(
       loc, builder.getStringAttr("__reuse_ir_realloc"),
       builder.getFunctionType({ptrTy, targetIdxTy, targetIdxTy, targetIdxTy},
