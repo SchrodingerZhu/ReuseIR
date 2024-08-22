@@ -341,5 +341,13 @@ def ReuseIR_ClosureType : ReuseIR_Type<"Closure", "closure",
   }];
 }
 
+class ReuseIR_RcTypeOf<list<Type> allowedTypes> : Type<
+  /*predicate*/ Concat<"[](::mlir::Type pointee) { return ",
+         SubstLeaves<"$_self", "pointee", AnyTypeOf<allowedTypes>.predicate>,
+         "; }(::llvm::cast<::mlir::reuse_ir::RcType>($_self).getPointee())">,
+  /* descr */ "RcType of certain types",
+  /* baseType */ "::mlir::reuse_ir::RcType"
+>;
+
 
 #endif // REUSE_IR_TYPES
