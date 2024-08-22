@@ -16,7 +16,9 @@
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <llvm-20/llvm/ADT/StringRef.h>
 #include <memory>
+#include <numeric>
 #include <optional>
 
 namespace mlir {
@@ -37,6 +39,61 @@ public:
   ReuseIRConvPatternWithLayoutCache(CompositeLayoutCache &cache, Args &&...args)
       : mlir::OpConversionPattern<Op>(std::forward<Args>(args)...),
         cache(cache) {}
+};
+
+class ClosureVTableOpLowering
+    : public ReuseIRConvPatternWithLayoutCache<ClosureVTableOp> {
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      ClosureVTableOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto vtableTy =
+        LLVM::LLVMStructType::getLiteral(getContext(), {ptrTy, ptrTy, ptrTy});
+    auto glbOp = rewriter.create<LLVM::GlobalOp>(
+        op->getLoc(), vtableTy, /*isConstant=*/true, LLVM::Linkage::Internal,
+        op.getName(), /*value=*/nullptr,
+        /*alignment=*/cache.getDataLayout().getTypeABIAlignment(vtableTy),
+        /*addrSpace=*/0, /*dsoLocal=*/true, /*threadLocal=*/false);
+    Block *block = rewriter.createBlock(&glbOp.getInitializerRegion());
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(block);
+      mlir::Value value =
+          rewriter.create<LLVM::UndefOp>(op->getLoc(), vtableTy);
+      auto symbols = llvm::SmallVector<llvm::StringRef, 3>{
+          adaptor.getFunc(), adaptor.getClone(), adaptor.getDrop()};
+      auto enums = llvm::enumerate(symbols);
+      value = std::accumulate(enums.begin(), enums.end(), value,
+                              [&](mlir::Value value, auto pair) {
+                                return rewriter.create<LLVM::InsertValueOp>(
+                                    op->getLoc(), vtableTy, value,
+                                    rewriter.create<LLVM::AddressOfOp>(
+                                        op->getLoc(), ptrTy, pair.value()),
+                                    pair.index());
+                              });
+      rewriter.create<LLVM::ReturnOp>(op->getLoc(), value);
+    }
+    rewriter.replaceOp(op, glbOp);
+    return mlir::reuse_ir::success();
+  }
+};
+
+class ClosureNewOpLowering
+    : public ReuseIRConvPatternWithLayoutCache<ClosureNewOp> {
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      ClosureNewOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    auto ty = typeConverter->convertType(op.getType());
+    // TODO: lower this properly
+    rewriter.replaceOpWithNewOp<LLVM::UndefOp>(op, ty);
+    return mlir::reuse_ir::success();
+  }
 };
 
 class ProjOpLowering : public ReuseIRConvPatternWithLayoutCache<ProjOp> {
@@ -279,15 +336,14 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   patterns.add<IncOpLowering, AllocOpLowering, FreeOpLowering>(converter,
                                                                &getContext());
   patterns.add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
-               LoadOpLowering>(cache, converter, &getContext());
+               LoadOpLowering, ClosureVTableOpLowering, ClosureNewOpLowering>(
+      cache, converter, &getContext());
   mlir::ConversionTarget target(getContext());
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalOp<mlir::ModuleOp>();
   target.addIllegalDialect<mlir::reuse_ir::ReuseIRDialect>();
   llvm::SmallVector<mlir::Operation *> ops;
-  module.walk([&](mlir::func::FuncOp op) {
-    op->walk([&](mlir::Operation *op) { ops.push_back(op); });
-  });
+  module.walk([&](mlir::Operation *op) { ops.push_back(op); });
   if (failed(applyPartialConversion(ops, target, std::move(patterns))))
     signalPassFailure();
 }
