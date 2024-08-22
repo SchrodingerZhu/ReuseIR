@@ -10,11 +10,13 @@ pub type CtorExpr<'src> = Ctor<'src, Expr<'src>>;
 pub type CtorParamsExpr<'src> = CtorParams<'src, Expr<'src>>;
 
 #[allow(dead_code)]
+#[derive(Debug)]
 pub struct File<'src> {
     pub decls: Box<[Decl<'src, Expr<'src>>]>,
 }
 
 #[allow(dead_code)]
+#[derive(Debug)]
 pub enum Expr<'src> {
     Ident(Ident<'src>),
 

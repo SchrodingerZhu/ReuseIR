@@ -1,7 +1,7 @@
 use chumsky::error::Rich;
 use chumsky::extra::Err;
 use chumsky::prelude::just;
-use chumsky::text::{ident, inline_whitespace, newline};
+use chumsky::text::{ident, inline_whitespace, newline, whitespace};
 use chumsky::{IterParser, Parser};
 
 use crate::concrete::{CtorExpr, CtorParamsExpr, Expr, File, ParamExpr};
@@ -123,6 +123,7 @@ impl Surface {
 
     fn ctor_unnamed_params<'src>(&mut self) -> out!(CtorParamsExpr<'src>) {
         just('(')
+            .ignore_then(whitespace())
             .ignore_then(
                 self.type_expr()
                     .padded()
@@ -133,11 +134,13 @@ impl Surface {
                     .map(Vec::into_boxed_slice)
                     .map(CtorParamsExpr::Unnamed),
             )
+            .then_ignore(whitespace())
             .then_ignore(just(')'))
     }
 
     fn ctor_named_params<'src>(&mut self) -> out!(CtorParamsExpr<'src>) {
         just('(')
+            .ignore_then(whitespace())
             .ignore_then(
                 self.param()
                     .padded()
@@ -148,6 +151,7 @@ impl Surface {
                     .map(Vec::into_boxed_slice)
                     .map(CtorParamsExpr::Named),
             )
+            .then_ignore(whitespace())
             .then_ignore(just(')'))
     }
 
@@ -167,15 +171,16 @@ impl Surface {
 
     fn param<'src>(&mut self) -> out!(ParamExpr<'src>) {
         self.ident()
-            .padded()
+            .then_ignore(whitespace())
             .then_ignore(just(':'))
-            .padded()
+            .then_ignore(whitespace())
             .then(self.type_expr())
             .map(|(name, typ)| Param { name, typ })
     }
 
     fn val_params<'src>(&mut self) -> out!(Box<[ParamExpr<'src>]>) {
         just('(')
+            .ignore_then(whitespace())
             .ignore_then(
                 self.param()
                     .padded()
@@ -186,11 +191,13 @@ impl Surface {
                     .or_not()
                     .map(Option::unwrap_or_default),
             )
+            .then_ignore(whitespace())
             .then_ignore(just(')'))
     }
 
     fn typ_params<'src>(&mut self) -> out!(Box<[ParamExpr<'src>]>) {
         just('[')
+            .ignore_then(whitespace())
             .ignore_then(
                 self.ident()
                     .padded()
@@ -204,6 +211,7 @@ impl Surface {
                     .collect::<Vec<_>>()
                     .map(Vec::into_boxed_slice),
             )
+            .then_ignore(whitespace())
             .then_ignore(just(']'))
     }
 
