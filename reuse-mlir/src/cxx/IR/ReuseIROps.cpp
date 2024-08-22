@@ -109,13 +109,6 @@ ClosureType ClosureNewOp::getClosureType() {
 mlir::reuse_ir::LogicalResult ClosureNewOp::verify() {
   if (getNumRegions() > 1)
     return emitOpError("cannot have more than one region");
-  if (getNumRegions() > 0 && getVtable())
-    return emitOpError("cannot have both a region and a vtable");
-  if (auto sym = *getVtable()) {
-    // TODO: Check if the symbol is a vtable
-    (void)SymbolTable::lookupNearestSymbolFrom(*this, sym);
-    return mlir::reuse_ir::success();
-  }
   Region *region = &getRegion(0);
   ClosureType closureTy = getClosureType();
   if (region->getArguments().size() != closureTy.getInputTypes().size())

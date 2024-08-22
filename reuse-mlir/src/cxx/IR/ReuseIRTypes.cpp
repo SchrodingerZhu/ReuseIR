@@ -324,7 +324,9 @@ CompositeType::getCompositeLayout(::mlir::DataLayout layout) const {
 ::mlir::reuse_ir::CompositeLayout
 ClosureType::getCompositeLayout(::mlir::DataLayout layout) const {
   auto ptrTy = mlir::LLVM::LLVMPointerType::get(getContext());
-  return {layout, {ptrTy, ptrTy, ptrTy}};
+  auto indexTy =
+      mlir::IntegerType::get(getContext(), layout.getTypeSizeInBits(ptrTy));
+  return {layout, {ptrTy, ptrTy, indexTy}};
 }
 
 void populateLLVMTypeConverter(CompositeLayoutCache &cache,

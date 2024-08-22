@@ -71,8 +71,6 @@ public:
 
   LogicalResult matchAndRewrite(ClosureNewOp op,
                                 PatternRewriter &rewriter) const final {
-    if (op.getVtable())
-      return failure();
     auto funcOp = dyn_cast<func::FuncOp>(op->getParentOp());
     if (!funcOp)
       return failure();
@@ -118,9 +116,16 @@ public:
                                      op.getClosureType(), lambdaFuncName,
                                      lambdaCloneName, lambdaDropName);
     rewriter.setInsertionPoint(op);
-    rewriter.replaceOpWithNewOp<ClosureNewOp>(
+    mlir::TypedValue<TokenType> argpack;
+    if (argTypes.size() > 0) {
+      CompositeLayout layout = argPackTy.getCompositeLayout(dataLayout);
+      auto tokenTy = TokenType::get(getContext(), layout.getAlignment().value(),
+                                    layout.getSize());
+      argpack = rewriter.create<AllocOp>(op->getLoc(), tokenTy);
+    }
+    rewriter.replaceOpWithNewOp<ClosureAssembleOp>(
         op, op.getType(), SymbolRefAttr::get(getContext(), lambdaVtableName),
-        0);
+        argpack);
     return LogicalResult::success();
   };
 };
@@ -142,10 +147,7 @@ void ReuseIRClosureOutliningPass::runOnOperation() {
 
   // Collect operations to be considered by the pass.
   SmallVector<Operation *, 16> ops;
-  getOperation()->walk([&](ClosureNewOp op) {
-    if (!op.getVtable())
-      ops.push_back(op);
-  });
+  getOperation()->walk([&](ClosureNewOp op) { ops.push_back(op); });
 
   // Configure rewrite to ignore new ops created during the pass.
   GreedyRewriteConfig config;

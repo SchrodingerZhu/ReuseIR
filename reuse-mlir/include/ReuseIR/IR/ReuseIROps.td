@@ -192,22 +192,38 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
 def ClosureNewOp : ReuseIR_Op<"closure.new"> {
   let summary = "Create a new closure";
   let description = [{
-    `reuse_ir.closure.new` creates a new closure object. 
-    The closure can either be a value or wrapped in a rc pointer.
+    `reuse_ir.closure.new` creates a new closure object (without wrapping it into RC). 
     The closure shall not capture mutable references (for now).
   }];
-  let results = (outs Res<AnyTypeOf<[ReuseIR_RcTypeOf<[ReuseIR_ClosureType]>, ReuseIR_ClosureType]>, 
+  let results = (outs Res<ReuseIR_ClosureType, 
     "Closure Object", [MemAlloc<DefaultResource>]>:$closure);
   let regions = (region VariadicRegion<MinSizedRegion<1>>:$body);
-  let arguments = (ins OptionalAttr<SymbolRefAttr>:$vtable);
   let assemblyFormat = [{
-    ($body^)? ($vtable^)? `:` type($closure) attr-dict
+    ($body^)? `:` type($closure) attr-dict
   }];
   let extraClassDeclaration = [{
     ::mlir::reuse_ir::ClosureType getClosureType();
   }];
   // TODO: add verifier
   let hasVerifier = 1;
+}
+
+def ClosureAssembleOp : ReuseIR_Op<"closure.assemble"> {
+  let summary = "Create a new closure with given resources";
+  let description = [{
+    `reuse_ir.closure.assemble` creates a new closure object. 
+    The closure can either be a value or wrapped in a rc pointer.
+    The closure shall not capture mutable references (for now).
+  }];
+  let results = (outs Res<ReuseIR_ClosureType, 
+    "Closure Object", [MemAlloc<DefaultResource>]>:$closure);
+  let arguments = (ins FlatSymbolRefAttr:$vtable, 
+    Arg<Optional<ReuseIR_TokenType>, "memory resource for argpack", [MemWrite]>:$argpack);
+  let assemblyFormat = [{
+    `vtable` `(` $vtable `)`
+    (`argpack` `(` $argpack^ `:` type($argpack) `)` )?
+    `:` attr-dict type($closure)
+  }];
 }
 
 def ClosureYieldOp : ReuseIR_Op<"closure.yield", [ReturnLike, Terminator,
@@ -235,7 +251,7 @@ def ClosureVTableOp : ReuseIR_Op<"closure.vtable"> {
     The vtable is a list of function pointers.
   }];
 
-  let arguments = (ins SymbolNameAttr:$name, TypeAttr:$closureType, SymbolNameAttr:$func, SymbolNameAttr:$clone, SymbolNameAttr:$drop);
+  let arguments = (ins FlatSymbolRefAttr:$name, TypeAttr:$closureType, FlatSymbolRefAttr:$func, FlatSymbolRefAttr:$clone, FlatSymbolRefAttr:$drop);
 
   let assemblyFormat = [{
     attr-dict $name `{` 

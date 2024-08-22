@@ -81,17 +81,34 @@ public:
   }
 };
 
-class ClosureNewOpLowering
-    : public ReuseIRConvPatternWithLayoutCache<ClosureNewOp> {
+class ClosureAssembleOpLowering
+    : public ReuseIRConvPatternWithLayoutCache<ClosureAssembleOp> {
 public:
   using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
 
   mlir::reuse_ir::LogicalResult matchAndRewrite(
-      ClosureNewOp op, OpAdaptor adaptor,
+      ClosureAssembleOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
     auto ty = typeConverter->convertType(op.getType());
-    // TODO: lower this properly
-    rewriter.replaceOpWithNewOp<LLVM::UndefOp>(op, ty);
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    mlir::Value closure = rewriter.create<LLVM::UndefOp>(op->getLoc(), ty);
+    mlir::Value zero = rewriter.create<LLVM::ConstantOp>(
+        op->getLoc(), getLLVMTypeConverter().getIndexType(), 0);
+    mlir::Value vtableAddr =
+        rewriter.create<LLVM::AddressOfOp>(op->getLoc(), ptrTy, op.getVtable());
+    closure = rewriter.create<LLVM::InsertValueOp>(op.getLoc(), closure,
+                                                   vtableAddr, 0);
+    if (op.getArgpack())
+      closure = rewriter.create<LLVM::InsertValueOp>(op.getLoc(), closure,
+                                                     adaptor.getArgpack(), 1);
+    else {
+      auto ptr = rewriter.create<LLVM::IntToPtrOp>(op->getLoc(), ptrTy, zero);
+      closure =
+          rewriter.create<LLVM::InsertValueOp>(op.getLoc(), closure, ptr, 1);
+    }
+    closure =
+        rewriter.create<LLVM::InsertValueOp>(op.getLoc(), closure, zero, 2);
+    rewriter.replaceOp(op, closure);
     return mlir::reuse_ir::success();
   }
 };
@@ -335,9 +352,10 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
   patterns.add<IncOpLowering, AllocOpLowering, FreeOpLowering>(converter,
                                                                &getContext());
-  patterns.add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
-               LoadOpLowering, ClosureVTableOpLowering, ClosureNewOpLowering>(
-      cache, converter, &getContext());
+  patterns
+      .add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
+           LoadOpLowering, ClosureVTableOpLowering, ClosureAssembleOpLowering>(
+          cache, converter, &getContext());
   mlir::ConversionTarget target(getContext());
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalOp<mlir::ModuleOp>();
