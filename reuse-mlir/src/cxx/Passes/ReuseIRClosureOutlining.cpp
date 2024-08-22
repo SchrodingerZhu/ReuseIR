@@ -19,10 +19,7 @@
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/LogicalResult.h"
 #include <algorithm>
-#include <llvm-20/llvm/ADT/Twine.h>
-#include <llvm-20/llvm/Support/raw_ostream.h>
 #include <memory>
 #include <optional>
 
@@ -55,9 +52,9 @@ struct ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
                    std::back_inserter(argTypes),
                    [](BlockArgument arg) { return arg.getType(); });
     auto argPackTy = CompositeType::get(getContext(), argTypes);
-    auto argPackRefTy = RefType::get(
-        getContext(), argPackTy,
-        FreezingKindAttr::get(getContext(), FreezingKind::nonfreezing));
+    auto nonfreezing =
+        FreezingKindAttr::get(getContext(), FreezingKind::nonfreezing);
+    auto argPackRefTy = RefType::get(getContext(), argPackTy, nonfreezing);
     // block number from the function
     auto lambdaNumber = assignedLambda[funcOp.getName()]++;
     std::string lambdaName =
@@ -71,7 +68,7 @@ struct ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
                                     op.getClosureType().getOutputType());
     auto cloneTy = FunctionType::get(getContext(), argPackRefTy, argPackRefTy);
     auto dropTy = FunctionType::get(getContext(), argPackRefTy, {});
-    rewriter.setInsertionPointToStart(&moduleOp.getBodyRegion().front());
+    rewriter.setInsertionPoint(funcOp);
     auto lambdaFuncOp =
         rewriter.create<func::FuncOp>(op->getLoc(), lambdaFuncName, funcTy);
     auto lambdaCloneOp =
@@ -82,6 +79,37 @@ struct ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
     lambdaFuncOp.setPrivate();
     lambdaCloneOp.setPrivate();
     lambdaDropOp.setPrivate();
+    {
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+      auto funcOpBlock = rewriter.createBlock(&lambdaFuncOp.getFunctionBody());
+      auto arg = funcOpBlock->addArgument(argPackRefTy, op.getLoc());
+      rewriter.setInsertionPointToStart(funcOpBlock);
+      llvm::SmallVector<Value> args;
+      std::transform(
+          op->getRegion(0).args_begin(), op->getRegion(0).args_end(),
+          std::back_inserter(args), [&](const mlir::BlockArgument &innerArg) {
+            mlir::Value ref =
+                rewriter
+                    .create<ProjOp>(op->getLoc(),
+                                    RefType::get(getContext(),
+                                                 innerArg.getType(),
+                                                 nonfreezing),
+                                    arg, innerArg.getArgNumber())
+                    ->getOpResult(0);
+            mlir::Value loaded =
+                rewriter.create<LoadOp>(op->getLoc(), innerArg.getType(), ref);
+            return loaded;
+          });
+      rewriter.inlineBlockBefore(&op->getRegion(0).front(), funcOpBlock,
+                                 funcOpBlock->end(), args);
+      funcOpBlock->walk([&](ClosureYieldOp yieldOp) {
+        rewriter.replaceOpWithNewOp<func::ReturnOp>(yieldOp,
+                                                    yieldOp.getOperands());
+      });
+      rewriter.inlineRegionBefore(op->getRegion(0),
+                                  lambdaFuncOp.getFunctionBody(),
+                                  lambdaFuncOp.getFunctionBody().end());
+    }
     rewriter.create<ClosureVTableOp>(op->getLoc(), lambdaVtableName,
                                      op.getClosureType(), lambdaFuncName,
                                      lambdaCloneName, lambdaDropName);
