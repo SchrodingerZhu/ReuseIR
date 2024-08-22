@@ -333,11 +333,11 @@ def ReuseIR_ClosureType : ReuseIR_Type<"Closure", "closure",
 
   let parameters = (ins
     ArrayRefParameter<"::mlir::Type">:$inputTypes,
-    "::mlir::Type":$outputType
+    OptionalParameter<"::mlir::Type">:$outputType
   );
 
   let assemblyFormat = [{
-    `<` `(` $inputTypes `)` `->` $outputType `>`
+    `<` `(` $inputTypes `)` (`->` $outputType^)? `>`
   }];
 }
 
