@@ -79,7 +79,7 @@ pub struct FreezableVTable {
     drop: std::option::Option<unsafe extern "C" fn(*mut FreezableRcBoxHeader)>,
     size: usize,
     alignment: usize,
-    scan_count: usize,
+    scan_count: isize,
     scan_offset: [usize; 0],
 }
 
@@ -90,19 +90,38 @@ pub struct FreezableRcBoxHeader {
     vtable: *const FreezableVTable,
 }
 
-struct FieldIterator {
-    slice_iter: std::slice::Iter<'static, usize>,
-    base_pointer: NonNull<u8>,
+enum FieldIterator {
+    Composite {
+        slice_iter: std::slice::Iter<'static, usize>,
+        base_pointer: NonNull<u8>,
+    },
+    Array {
+        cursor: NonNull<u8>,
+        remaining: usize,
+        stride: usize,
+    },
 }
 
 impl FieldIterator {
     unsafe fn new(base_pointer: NonNull<FreezableRcBoxHeader>) -> Self {
         let vtable = base_pointer.as_ref().vtable;
-        let slice =
-            std::slice::from_raw_parts((*vtable).scan_offset.as_ptr(), (*vtable).scan_count);
-        Self {
-            slice_iter: slice.iter(),
-            base_pointer: base_pointer.cast(),
+        if (*vtable).scan_count >= 0 {
+            let slice = std::slice::from_raw_parts(
+                (*vtable).scan_offset.as_ptr(),
+                (*vtable).scan_count as usize,
+            );
+            Self::Composite {
+                slice_iter: slice.iter(),
+                base_pointer: base_pointer.cast(),
+            }
+        } else {
+            let remaining = -(*vtable).scan_count as usize;
+            let stride = (*vtable).scan_offset.as_ptr().read();
+            Self::Array {
+                cursor: base_pointer.cast(),
+                remaining,
+                stride,
+            }
         }
     }
 }
@@ -111,13 +130,32 @@ impl Iterator for FieldIterator {
     type Item = Option<NonNull<FreezableRcBoxHeader>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.slice_iter.next().map(|offset| unsafe {
-            let pointer = self
-                .base_pointer
-                .byte_add(*offset)
-                .cast::<*mut FreezableRcBoxHeader>();
-            NonNull::new(pointer.read())
-        })
+        match self {
+            Self::Composite {
+                slice_iter,
+                base_pointer,
+            } => slice_iter.next().map(|offset| unsafe {
+                let pointer = base_pointer
+                    .byte_add(*offset)
+                    .cast::<*mut FreezableRcBoxHeader>();
+                NonNull::new(pointer.read())
+            }),
+            Self::Array {
+                cursor,
+                remaining,
+                stride,
+            } => {
+                if *remaining == 0 {
+                    return None;
+                }
+                unsafe {
+                    let pointer = cursor.cast::<*mut FreezableRcBoxHeader>().read();
+                    *cursor = cursor.byte_add(*stride);
+                    *remaining -= 1;
+                    Some(NonNull::new(pointer))
+                }
+            }
+        }
     }
 }
 

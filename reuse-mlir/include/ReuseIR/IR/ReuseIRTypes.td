@@ -117,9 +117,11 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
       void*  drop;
       size_t size;
       size_t alignment;
-      size_t scan_count;
+      ssize_t scan_count;
       size_t scan_offset[0];
     }
+    - if scan_count >= 0, then scan_offset stores offsets for inner mutable fields (composite types).;
+    - if scan_count < 0, then scan_offset contains a single value annotates the stride between inner mutable fields (array types).
     ```
   }];
   let parameters = (ins
