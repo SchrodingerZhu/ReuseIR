@@ -5,8 +5,8 @@ module @test {
     // CHECK: func.func @foo(%{{[0-9a-z]+}}: !reuse_ir.rc<i64, atomic, nonfreezing>, %{{[0-9a-z]+}}: !llvm.struct<()>)
     func.func @foo(%0 : !reuse_ir.rc<i64, atomic, nonfreezing>, %test: !llvm.struct<()>) {
         reuse_ir.rc.acquire (%0 : !reuse_ir.rc<i64, atomic, nonfreezing>)
-        %1 = reuse_ir.alloc : !reuse_ir.token<size : 128, alignment : 16>
-        reuse_ir.free (%1 : !reuse_ir.token<size: 128, alignment: 16>)
+        %1 = reuse_ir.token.alloc : !reuse_ir.token<size : 128, alignment : 16>
+        reuse_ir.token.free (%1 : !reuse_ir.token<size: 128, alignment: 16>)
         return
     }
     // CHECK: func.func @bar(%{{[0-9a-z]+}}: !reuse_ir.rc<i64, atomic, nonfreezing>)

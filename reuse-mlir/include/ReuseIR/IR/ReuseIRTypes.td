@@ -357,5 +357,13 @@ class ReuseIR_RefTypeOf<list<Type> allowedTypes> : Type<
   /* baseType */ "::mlir::reuse_ir::RefType"
 >;
 
+class ReuseIR_NullableToken : Type<
+  /*predicate*/ Concat<"[](::mlir::Type pointee) { return ",
+         SubstLeaves<"$_self", "pointee", AnyTypeOf<[ReuseIR_TokenType]>.predicate>,
+         "; }(::llvm::cast<::mlir::reuse_ir::NullableType>($_self).getPointee())">,
+  /* descr */ "RcType of certain types",
+  /* baseType */ "::mlir::reuse_ir::NullableType"
+>;
+
 
 #endif // REUSE_IR_TYPES

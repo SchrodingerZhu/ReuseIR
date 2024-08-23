@@ -218,11 +218,11 @@ public:
   }
 };
 
-class AllocOpLowering : public mlir::OpConversionPattern<AllocOp> {
+class TokenAllocOpLowering : public mlir::OpConversionPattern<TokenAllocOp> {
 public:
-  using OpConversionPattern<AllocOp>::OpConversionPattern;
+  using OpConversionPattern<TokenAllocOp>::OpConversionPattern;
   mlir::reuse_ir::LogicalResult matchAndRewrite(
-      AllocOp op, OpAdaptor adaptor,
+      TokenAllocOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
     TokenType tokenTy = op.getToken().getType();
     const auto *cvt = static_cast<const LLVMTypeConverter *>(typeConverter);
@@ -237,11 +237,11 @@ public:
   }
 };
 
-class FreeOpLowering : public mlir::OpConversionPattern<FreeOp> {
+class TokenFreeOpLowering : public mlir::OpConversionPattern<TokenFreeOp> {
 public:
-  using OpConversionPattern<FreeOp>::OpConversionPattern;
+  using OpConversionPattern<TokenFreeOp>::OpConversionPattern;
   mlir::reuse_ir::LogicalResult matchAndRewrite(
-      FreeOp op, OpAdaptor adaptor,
+      TokenFreeOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
     TokenType tokenTy = op.getToken().getType();
     const auto *cvt = static_cast<const LLVMTypeConverter *>(typeConverter);
@@ -356,7 +356,7 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   populateLLVMTypeConverter(cache, converter);
   mlir::RewritePatternSet patterns(&getContext());
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
-  patterns.add<RcAcquireOpLowering, AllocOpLowering, FreeOpLowering>(
+  patterns.add<RcAcquireOpLowering, TokenAllocOpLowering, TokenFreeOpLowering>(
       converter, &getContext());
   patterns
       .add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,

@@ -21,7 +21,7 @@ include "ReuseIR/IR/ReuseIRTypes.td"
 class ReuseIR_Op<string mnemonic, list<Trait> traits = []> :
     Op<ReuseIR_Dialect, mnemonic, traits>;
 
-def AllocOp : ReuseIR_Op<"alloc", []> {
+def TokenAllocOp : ReuseIR_Op<"token.alloc", []> {
 
   let summary = "Allocate memory token";
   let description = [{
@@ -38,16 +38,14 @@ def AllocOp : ReuseIR_Op<"alloc", []> {
   let assemblyFormat = [{
     `:` type($token) attr-dict
   }];
-
-  let hasVerifier = 0;
 }
 
-def FreeOp : ReuseIR_Op<"free", []> {
+def TokenFreeOp : ReuseIR_Op<"token.free", []> {
   let summary = "Free memory token";
   let description = [{
-    `reuse_ir.free` deallocates a memory token.
+    `reuse_ir.token.free` deallocates a memory token.
     ```mlir
-    reuse_ir.free (%x : !reuse_ir.token<size: 16, alignment: 8>)
+    reuse_ir.token.free (%x : !reuse_ir.token<size: 16, alignment: 8>)
     ```
   }];
 
@@ -58,8 +56,6 @@ def FreeOp : ReuseIR_Op<"free", []> {
   let assemblyFormat = [{
     `(` $token `:` type($token) `)` attr-dict
   }];
-
-  let hasVerifier = 0;
 }
 
 def RcAcquireOp : ReuseIR_Op<"rc.acquire"> {
