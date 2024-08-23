@@ -62,20 +62,20 @@ def FreeOp : ReuseIR_Op<"free", []> {
   let hasVerifier = 0;
 }
 
-def IncOp : ReuseIR_Op<"inc"> {
+def RcAcquireOp : ReuseIR_Op<"rc.acquire"> {
 
   let summary = "Increase reference count";
   let description = [{
-    `reuse_ir.inc` increases the reference count of the object.
+    `reuse_ir.rc.acquire` increases the reference count of the object.
     ```mlir
-    reuse_ir.inc (%0 : !reuse_ir.rc<i32>)
+    reuse_ir.rc.acquire (%0 : !reuse_ir.rc<i32>)
     ```
   }];
 
-  let arguments = (ins Arg<ReuseIR_RcType, "RC pointer", [MemReadAt<0>, MemReadAt<1>]>:$rcPtr, OptionalAttr<I64Attr>:$count);
+  let arguments = (ins Arg<ReuseIR_RcType, "target rc pointer", [MemReadAt<0>, MemReadAt<1>]>:$rcPtr);
 
   let assemblyFormat = [{
-    `(` $rcPtr `:` type($rcPtr)  (`,` $count^ )? `)` attr-dict
+    `(` $rcPtr `:` type($rcPtr) `)` attr-dict
   }];
 
   let hasVerifier = 1;
