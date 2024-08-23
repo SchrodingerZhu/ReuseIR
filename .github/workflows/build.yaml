@@ -11,6 +11,8 @@ jobs:
       LLVM_DIR: /usr/lib/llvm-${{matrix.version}}/
       CXX: /usr/lib/llvm-${{matrix.version}}/bin/clang++
       CC:  /usr/lib/llvm-${{matrix.version}}/bin/clang
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,9 +29,11 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy, rustfmt
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.5
       - name: ReuseIR Check
         run: |
-            cmake -S reuse-mlir -B build -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+            cmake -S reuse-mlir -B build -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
             cmake --build build --target check --parallel
       - name: Run Clippy
         run: cargo clippy
