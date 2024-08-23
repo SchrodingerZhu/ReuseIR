@@ -55,11 +55,10 @@ class ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
     rewriter.inlineRegionBefore(op->getRegion(0),
                                 lambdaFuncOp.getFunctionBody(),
                                 lambdaFuncOp.getFunctionBody().end());
-    for (auto &block : lambdaFuncOp.getFunctionBody().getBlocks()) {
+    for (auto &block : lambdaFuncOp.getFunctionBody().getBlocks())
       if (auto yield = dyn_cast_or_null<ClosureYieldOp>(block.getTerminator()))
         rewriter.replaceOpWithNewOp<func::ReturnOp>(yield,
                                                     yield->getOperands());
-    }
   }
 
 public:
