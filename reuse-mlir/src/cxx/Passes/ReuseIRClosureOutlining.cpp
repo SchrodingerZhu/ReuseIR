@@ -121,7 +121,7 @@ public:
       CompositeLayout layout = argPackTy.getCompositeLayout(dataLayout);
       auto tokenTy = TokenType::get(getContext(), layout.getAlignment().value(),
                                     layout.getSize());
-      argpack = rewriter.create<AllocOp>(op->getLoc(), tokenTy);
+      argpack = rewriter.create<TokenAllocOp>(op->getLoc(), tokenTy);
     }
     rewriter.replaceOpWithNewOp<ClosureAssembleOp>(
         op, op.getType(), SymbolRefAttr::get(getContext(), lambdaVtableName),

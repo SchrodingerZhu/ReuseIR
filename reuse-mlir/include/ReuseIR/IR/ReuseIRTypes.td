@@ -72,11 +72,11 @@ def ReuseIR_NullableType : ReuseIR_Type<"Nullable", "nullable",
     [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
   let summary = "ReuseIR Nullable Type";
   let description = [{
-    `reuse_ir.nullable` is a nullable type. Rc pointers on default at nonnull in ReuseIR.
+    `reuse_ir.nullable` is a nullable type. Rc pointers and tokens on default at nonnull in ReuseIR.
     This is just a type wrapper to indicate that the pointer can be null.
   }];
   let parameters = (ins
-    "::mlir::reuse_ir::RcType":$pointer
+    "::mlir::Type":$pointer
   );
   let assemblyFormat = [{
     `<` $pointer `>`
@@ -355,6 +355,14 @@ class ReuseIR_RefTypeOf<list<Type> allowedTypes> : Type<
          "; }(::llvm::cast<::mlir::reuse_ir::RefType>($_self).getPointee())">,
   /* descr */ "RcType of certain types",
   /* baseType */ "::mlir::reuse_ir::RefType"
+>;
+
+def ReuseIR_NullableToken : Type<
+  /*predicate*/ Concat<"[](::mlir::Type pointer) { return ",
+         SubstLeaves<"$_self", "pointer", AnyTypeOf<[ReuseIR_TokenType]>.predicate>,
+         "; }(::llvm::cast<::mlir::reuse_ir::NullableType>($_self).getPointer())">,
+  /* descr */ "RcType of certain types",
+  /* baseType */ "::mlir::reuse_ir::NullableType"
 >;
 
 

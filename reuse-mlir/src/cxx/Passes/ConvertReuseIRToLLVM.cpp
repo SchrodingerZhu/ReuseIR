@@ -6,6 +6,7 @@
 #include "ReuseIR/Passes.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -218,11 +219,11 @@ public:
   }
 };
 
-class AllocOpLowering : public mlir::OpConversionPattern<AllocOp> {
+class TokenAllocOpLowering : public mlir::OpConversionPattern<TokenAllocOp> {
 public:
-  using OpConversionPattern<AllocOp>::OpConversionPattern;
+  using OpConversionPattern<TokenAllocOp>::OpConversionPattern;
   mlir::reuse_ir::LogicalResult matchAndRewrite(
-      AllocOp op, OpAdaptor adaptor,
+      TokenAllocOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
     TokenType tokenTy = op.getToken().getType();
     const auto *cvt = static_cast<const LLVMTypeConverter *>(typeConverter);
@@ -237,22 +238,24 @@ public:
   }
 };
 
-class FreeOpLowering : public mlir::OpConversionPattern<FreeOp> {
+class TokenFreeOpLowering : public mlir::OpConversionPattern<TokenFreeOp> {
 public:
-  using OpConversionPattern<FreeOp>::OpConversionPattern;
+  using OpConversionPattern<TokenFreeOp>::OpConversionPattern;
   mlir::reuse_ir::LogicalResult matchAndRewrite(
-      FreeOp op, OpAdaptor adaptor,
+      TokenFreeOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
-    TokenType tokenTy = op.getToken().getType();
-    const auto *cvt = static_cast<const LLVMTypeConverter *>(typeConverter);
-    auto size = rewriter.create<mlir::LLVM::ConstantOp>(
-        op.getLoc(), cvt->getIndexType(), tokenTy.getSize());
-    auto alignment = rewriter.create<mlir::LLVM::ConstantOp>(
-        op.getLoc(), cvt->getIndexType(), tokenTy.getAlignment());
-    rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
-        op, "__reuse_ir_dealloc", mlir::ValueRange{},
-        mlir::ValueRange{adaptor.getToken(), size, alignment});
-    return mlir::reuse_ir::success();
+    if (auto tokenTy = dyn_cast<TokenType>(op.getToken().getType())) {
+      const auto *cvt = static_cast<const LLVMTypeConverter *>(typeConverter);
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          op.getLoc(), cvt->getIndexType(), tokenTy.getSize());
+      auto alignment = rewriter.create<mlir::LLVM::ConstantOp>(
+          op.getLoc(), cvt->getIndexType(), tokenTy.getAlignment());
+      rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
+          op, "__reuse_ir_dealloc", mlir::ValueRange{},
+          mlir::ValueRange{adaptor.getToken(), size, alignment});
+      return mlir::reuse_ir::success();
+    }
+    return LogicalResult::failure();
   }
 };
 
@@ -356,7 +359,7 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   populateLLVMTypeConverter(cache, converter);
   mlir::RewritePatternSet patterns(&getContext());
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
-  patterns.add<RcAcquireOpLowering, AllocOpLowering, FreeOpLowering>(
+  patterns.add<RcAcquireOpLowering, TokenAllocOpLowering, TokenFreeOpLowering>(
       converter, &getContext());
   patterns
       .add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,

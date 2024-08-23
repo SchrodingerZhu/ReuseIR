@@ -15,7 +15,7 @@ module @test attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<f80, dense<
     // TODO: check drop
     // CHECK-OUTLINING: reuse_ir.closure.vtable @closure_test$$lambda0$$vtable{closure_type : !reuse_ir.closure<(i32, i128) -> i128>, func : @closure_test$$lambda0$$func, clone : @closure_test$$lambda0$$clone, drop : @closure_test$$lambda0$$drop}
     // CHECK-OUTLINING: func.func @closure_test() -> !reuse_ir.closure<(i32, i128) -> i128> {
-    // CHECK-OUTLINING:   %[[REG0:[0-9a-z]+]] = reuse_ir.alloc : <size : 32, alignment : 16>
+    // CHECK-OUTLINING:   %[[REG0:[0-9a-z]+]] = reuse_ir.token.alloc : <size : 32, alignment : 16>
     // CHECK-OUTLINING:   %[[REG1:[0-9a-z]+]] = reuse_ir.closure.assemble vtable(@closure_test$$lambda0$$vtable) argpack(%[[REG0]] : !reuse_ir.token<size : 32, alignment : 16>) : <(i32, i128) -> i128>
     // CHECK-OUTLINING:   return %[[REG1]] : !reuse_ir.closure<(i32, i128) -> i128>
     // CHECK-OUTLINING: }

@@ -21,7 +21,7 @@ include "ReuseIR/IR/ReuseIRTypes.td"
 class ReuseIR_Op<string mnemonic, list<Trait> traits = []> :
     Op<ReuseIR_Dialect, mnemonic, traits>;
 
-def AllocOp : ReuseIR_Op<"alloc", []> {
+def TokenAllocOp : ReuseIR_Op<"token.alloc", []> {
 
   let summary = "Allocate memory token";
   let description = [{
@@ -38,28 +38,63 @@ def AllocOp : ReuseIR_Op<"alloc", []> {
   let assemblyFormat = [{
     `:` type($token) attr-dict
   }];
-
-  let hasVerifier = 0;
 }
 
-def FreeOp : ReuseIR_Op<"free", []> {
+def TokenFreeOp : ReuseIR_Op<"token.free", []> {
   let summary = "Free memory token";
   let description = [{
-    `reuse_ir.free` deallocates a memory token.
+    `reuse_ir.token.free` deallocates a memory token.
     ```mlir
-    reuse_ir.free (%x : !reuse_ir.token<size: 16, alignment: 8>)
+    reuse_ir.token.free (%x : !reuse_ir.token<size: 16, alignment: 8>)
     ```
   }];
 
   let arguments = (ins Res<
-    ReuseIR_TokenType,
+    AnyTypeOf<[ReuseIR_TokenType, ReuseIR_NullableToken]>,
     "Free Memory Token", [MemFree<DefaultResource>]>:$token);
 
   let assemblyFormat = [{
     `(` $token `:` type($token) `)` attr-dict
   }];
+}
 
-  let hasVerifier = 0;
+def TokenReinterpretOp : ReuseIR_Op<"token.reinterpret"> {
+  let summary = "Reinterpret the token type";
+  let description = [{
+    `reuse_ir.token.reinterpret` reinterprets the token type.
+  }];
+  let results = (outs Res<ReuseIR_RefType, "reinterpreted reference">:$result);
+  let arguments = (ins Arg<ReuseIR_TokenType, "Token to reinterpret">:$token);
+  let assemblyFormat = [{
+    `(` $token `:` type($token) `)` attr-dict `->` type($result)
+  }];
+}
+
+def TokenEnsureOp : ReuseIR_Op<"token.ensure"> {
+  let summary = "Ensure a nonnull token";
+  let description = [{
+    `reuse_ir.token.ensure` converts a possibly nullable token to a token by checking
+    the nullability and allocate memory on need.
+  }];
+  let results = (outs Res<ReuseIR_TokenType, "output token", [MemAlloc<DefaultResource>]>:$result);
+  let arguments = (ins Arg<ReuseIR_NullableToken, "input token">:$nullableToken);
+  let assemblyFormat = [{
+    `(` $nullableToken `:` type($nullableToken) `)` attr-dict `->` type($result)
+  }];
+}
+
+def TokenReallocOp : ReuseIR_Op<"token.realloc"> {
+  let summary = "Ensure a nonnull token";
+  let description = [{
+    `reuse_ir.token.realloc` converts a possibly nullable token to a token by checking
+    the nullability and reallocate the memory on need. Utimately, we should custom the
+    allocator to avoid memcpy if the content is not to be retained.
+  }];
+  let results = (outs Res<ReuseIR_TokenType, "output token", [MemAlloc<DefaultResource>]>:$result);
+  let arguments = (ins Arg<ReuseIR_NullableToken, "input token">:$nullableToken);
+  let assemblyFormat = [{
+    `(` $nullableToken `:` type($nullableToken) `)` attr-dict `->` type($result)
+  }];
 }
 
 def RcAcquireOp : ReuseIR_Op<"rc.acquire"> {
@@ -212,18 +247,6 @@ def UnionInspectOp : ReuseIR_Op<"union.inspect"> {
   let arguments = (ins ReuseIR_RefTypeOf<[ReuseIR_UnionType]>:$unionRef, IndexAttr:$index);
   let assemblyFormat = [{
     $unionRef `[` $index `]` attr-dict `:` type($unionRef) `->` type($result)
-  }];
-}
-
-def TokenReinterpretOp : ReuseIR_Op<"token.reinterpret"> {
-  let summary = "Reinterpret the token type";
-  let description = [{
-    `reuse_ir.token.reinterpret` reinterprets the token type.
-  }];
-  let results = (outs Res<ReuseIR_RefType, "reinterpreted reference">:$result);
-  let arguments = (ins Res<ReuseIR_TokenType, "Token to reinterpret">:$token);
-  let assemblyFormat = [{
-    `(` $token `:` type($token) `)` attr-dict `->` type($result)
   }];
 }
 
