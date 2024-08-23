@@ -3,6 +3,7 @@
 #include "ReuseIR/IR/ReuseIROps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "llvm/Support/ErrorHandling.h"
 

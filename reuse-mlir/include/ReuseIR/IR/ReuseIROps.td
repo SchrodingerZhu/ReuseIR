@@ -50,11 +50,50 @@ def TokenFreeOp : ReuseIR_Op<"token.free", []> {
   }];
 
   let arguments = (ins Res<
-    ReuseIR_TokenType,
+    AnyTypeOf<[ReuseIR_TokenType, ReuseIR_NullableToken]>,
     "Free Memory Token", [MemFree<DefaultResource>]>:$token);
 
   let assemblyFormat = [{
     `(` $token `:` type($token) `)` attr-dict
+  }];
+}
+
+def TokenReinterpretOp : ReuseIR_Op<"token.reinterpret"> {
+  let summary = "Reinterpret the token type";
+  let description = [{
+    `reuse_ir.token.reinterpret` reinterprets the token type.
+  }];
+  let results = (outs Res<ReuseIR_RefType, "reinterpreted reference">:$result);
+  let arguments = (ins Arg<ReuseIR_TokenType, "Token to reinterpret">:$token);
+  let assemblyFormat = [{
+    `(` $token `:` type($token) `)` attr-dict `->` type($result)
+  }];
+}
+
+def TokenEnsureOp : ReuseIR_Op<"token.ensure"> {
+  let summary = "Ensure a nonnull token";
+  let description = [{
+    `reuse_ir.token.ensure` converts a possibly nullable token to a token by checking
+    the nullability and allocate memory on need.
+  }];
+  let results = (outs Res<ReuseIR_TokenType, "output token", [MemAlloc<DefaultResource>]>:$result);
+  let arguments = (ins Arg<ReuseIR_NullableToken, "input token">:$nullableToken);
+  let assemblyFormat = [{
+    `(` $nullableToken `:` type($nullableToken) `)` attr-dict `->` type($result)
+  }];
+}
+
+def TokenReallocOp : ReuseIR_Op<"token.realloc"> {
+  let summary = "Ensure a nonnull token";
+  let description = [{
+    `reuse_ir.token.realloc` converts a possibly nullable token to a token by checking
+    the nullability and reallocate the memory on need. Utimately, we should custom the
+    allocator to avoid memcpy if the content is not to be retained.
+  }];
+  let results = (outs Res<ReuseIR_TokenType, "output token", [MemAlloc<DefaultResource>]>:$result);
+  let arguments = (ins Arg<ReuseIR_NullableToken, "input token">:$nullableToken);
+  let assemblyFormat = [{
+    `(` $nullableToken `:` type($nullableToken) `)` attr-dict `->` type($result)
   }];
 }
 
@@ -208,18 +247,6 @@ def UnionInspectOp : ReuseIR_Op<"union.inspect"> {
   let arguments = (ins ReuseIR_RefTypeOf<[ReuseIR_UnionType]>:$unionRef, IndexAttr:$index);
   let assemblyFormat = [{
     $unionRef `[` $index `]` attr-dict `:` type($unionRef) `->` type($result)
-  }];
-}
-
-def TokenReinterpretOp : ReuseIR_Op<"token.reinterpret"> {
-  let summary = "Reinterpret the token type";
-  let description = [{
-    `reuse_ir.token.reinterpret` reinterprets the token type.
-  }];
-  let results = (outs Res<ReuseIR_RefType, "reinterpreted reference">:$result);
-  let arguments = (ins Res<ReuseIR_TokenType, "Token to reinterpret">:$token);
-  let assemblyFormat = [{
-    `(` $token `:` type($token) `)` attr-dict `->` type($result)
   }];
 }
 

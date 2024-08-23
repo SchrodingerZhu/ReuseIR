@@ -22,6 +22,7 @@ def ReuseIR_Dialect : Dialect {
   let dependentDialects = [
     "::mlir::BuiltinDialect",
     "::mlir::func::FuncDialect",
+    "::mlir::scf::SCFDialect",
     "::mlir::LLVM::LLVMDialect",
   ];
 }

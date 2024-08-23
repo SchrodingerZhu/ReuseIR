@@ -6,6 +6,7 @@
 #include "ReuseIR/Passes.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -243,16 +244,18 @@ public:
   mlir::reuse_ir::LogicalResult matchAndRewrite(
       TokenFreeOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
-    TokenType tokenTy = op.getToken().getType();
-    const auto *cvt = static_cast<const LLVMTypeConverter *>(typeConverter);
-    auto size = rewriter.create<mlir::LLVM::ConstantOp>(
-        op.getLoc(), cvt->getIndexType(), tokenTy.getSize());
-    auto alignment = rewriter.create<mlir::LLVM::ConstantOp>(
-        op.getLoc(), cvt->getIndexType(), tokenTy.getAlignment());
-    rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
-        op, "__reuse_ir_dealloc", mlir::ValueRange{},
-        mlir::ValueRange{adaptor.getToken(), size, alignment});
-    return mlir::reuse_ir::success();
+    if (auto tokenTy = dyn_cast<TokenType>(op.getToken().getType())) {
+      const auto *cvt = static_cast<const LLVMTypeConverter *>(typeConverter);
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          op.getLoc(), cvt->getIndexType(), tokenTy.getSize());
+      auto alignment = rewriter.create<mlir::LLVM::ConstantOp>(
+          op.getLoc(), cvt->getIndexType(), tokenTy.getAlignment());
+      rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
+          op, "__reuse_ir_dealloc", mlir::ValueRange{},
+          mlir::ValueRange{adaptor.getToken(), size, alignment});
+      return mlir::reuse_ir::success();
+    }
+    return LogicalResult::failure();
   }
 };
 
