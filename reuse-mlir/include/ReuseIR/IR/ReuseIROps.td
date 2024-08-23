@@ -12,6 +12,7 @@ include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/CommonAttrConstraints.td"
+include "mlir/IR/BuiltinAttributes.td"
 
 include "ReuseIR/IR/ReuseIRDialect.td"
 include "ReuseIR/IR/ReuseIRAttrs.td"
@@ -189,6 +190,54 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
   let hasVerifier = 0;
 }
 
+def UnionGetTagOp : ReuseIR_Op<"union.get_tag"> {
+  let summary = "Get the tag of the union type";
+  let description = [{
+    `reuse_ir.union.get_tag` gets the tag of the union type.
+  }];
+  let results = (outs Builtin_Index:$tag);
+  let arguments = (ins ReuseIR_RefTypeOf<[ReuseIR_UnionType]>:$unionRef);
+  let assemblyFormat = [{
+    $unionRef attr-dict `:` type($unionRef) `->` type($tag)
+  }];
+}
+
+def UnionInspectOp : ReuseIR_Op<"union.inspect"> {
+  let summary = "Inspect the union type";
+  let description = [{
+    `reuse_ir.union.inspect` inspects the union type and returns a reference to the type of
+    the given index. Such inspection is not checked in runtime.
+  }];
+  let results = (outs ReuseIR_RefType:$result);
+  let arguments = (ins ReuseIR_RefTypeOf<[ReuseIR_UnionType]>:$unionRef, IndexAttr:$index);
+  let assemblyFormat = [{
+    $unionRef `[` $index `]` attr-dict `:` type($unionRef) `->` type($result)
+  }];
+}
+
+def TokenReinterpretOp : ReuseIR_Op<"token.reinterpret"> {
+  let summary = "Reinterpret the token type";
+  let description = [{
+    `reuse_ir.token.reinterpret` reinterprets the token type.
+  }];
+  let results = (outs Res<ReuseIR_RefType, "reinterpreted reference">:$result);
+  let arguments = (ins Res<ReuseIR_TokenType, "Token to reinterpret">:$token);
+  let assemblyFormat = [{
+    `(` $token `:` type($token) `)` attr-dict `->` type($result)
+  }];
+}
+
+def PanicOp : ReuseIR_Op<"panic", [Terminator]> {
+  let summary = "Panic the program";
+  let description = [{
+    `reuse_ir.panic` panics the program.
+  }];
+  let arguments = (ins Builtin_StringAttr:$message);
+  let assemblyFormat = [{
+    `(` $message `)` attr-dict
+  }];
+}
+
 def ClosureNewOp : ReuseIR_Op<"closure.new"> {
   let summary = "Create a new closure";
   let description = [{
@@ -261,6 +310,5 @@ def ClosureVTableOp : ReuseIR_Op<"closure.vtable"> {
       `drop` `:` $drop
     `}` 
   }];
-  
 }
 #endif // REUSE_IR_OPS
