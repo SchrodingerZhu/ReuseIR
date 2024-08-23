@@ -320,19 +320,24 @@ static void emitRuntimeFunctions(mlir::Location loc,
       loc, builder.getStringAttr("__reuse_ir_acquire_atomic_freezable"),
       builder.getFunctionType({ptrTy, targetIdxTy}, {}),
       builder.getStringAttr("private"), nullptr, nullptr);
-  builder.create<mlir::func::FuncOp>(
+  auto alloc = builder.create<mlir::func::FuncOp>(
       loc, builder.getStringAttr("__reuse_ir_alloc"),
       builder.getFunctionType({targetIdxTy, targetIdxTy}, {ptrTy}),
       builder.getStringAttr("private"), nullptr, nullptr);
-  builder.create<mlir::func::FuncOp>(
+  alloc.setArgAttr(1, "llvm.allocalign", builder.getUnitAttr());
+  auto dealloc = builder.create<mlir::func::FuncOp>(
       loc, builder.getStringAttr("__reuse_ir_dealloc"),
       builder.getFunctionType({ptrTy, targetIdxTy, targetIdxTy}, {}),
       builder.getStringAttr("private"), nullptr, nullptr);
-  builder.create<mlir::func::FuncOp>(
+  dealloc.setArgAttr(0, "llvm.allocptr", builder.getUnitAttr());
+  dealloc.setArgAttr(2, "llvm.allocalign", builder.getUnitAttr());
+  auto realloc = builder.create<mlir::func::FuncOp>(
       loc, builder.getStringAttr("__reuse_ir_realloc"),
       builder.getFunctionType({ptrTy, targetIdxTy, targetIdxTy, targetIdxTy},
                               {ptrTy}),
       builder.getStringAttr("private"), nullptr, nullptr);
+  realloc.setArgAttr(0, "llvm.allocptr", builder.getUnitAttr());
+  realloc.setArgAttr(2, "llvm.allocalign", builder.getUnitAttr());
 }
 
 void ConvertReuseIRToLLVMPass::runOnOperation() {
