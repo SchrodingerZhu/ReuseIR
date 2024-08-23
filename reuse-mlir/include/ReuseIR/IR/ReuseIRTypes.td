@@ -349,5 +349,13 @@ class ReuseIR_RcTypeOf<list<Type> allowedTypes> : Type<
   /* baseType */ "::mlir::reuse_ir::RcType"
 >;
 
+class ReuseIR_RefTypeOf<list<Type> allowedTypes> : Type<
+  /*predicate*/ Concat<"[](::mlir::Type pointee) { return ",
+         SubstLeaves<"$_self", "pointee", AnyTypeOf<allowedTypes>.predicate>,
+         "; }(::llvm::cast<::mlir::reuse_ir::RefType>($_self).getPointee())">,
+  /* descr */ "RcType of certain types",
+  /* baseType */ "::mlir::reuse_ir::RefType"
+>;
+
 
 #endif // REUSE_IR_TYPES
