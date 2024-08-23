@@ -24,4 +24,15 @@ def ReuseIRClosureOutlining : Pass<"reuse-ir-closure-outlining", "::mlir::Module
   let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
 }
 
+def ReuseIRExpandControlFlow : Pass<"reuse-ir-expand-control-flow", "::mlir::ModuleOp"> {
+  let summary = "Expand structured control flows for ReuseIR operations";
+  let description = [{
+    This pass is used to expand control flows for ReuseIR operations.
+    - reuse_ir.token.ensure
+    - reuse_ir.token.free (with nullible token)
+  }];
+  let constructor = "::mlir::reuse_ir::createReuseIRExpandControlFlowPass()";
+  let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect", "::mlir::scf::SCFDialect"];
+}
+
 #endif // REUSE_IR_PASSES

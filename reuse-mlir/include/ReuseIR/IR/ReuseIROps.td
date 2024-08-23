@@ -66,7 +66,7 @@ def TokenReinterpretOp : ReuseIR_Op<"token.reinterpret"> {
   let results = (outs Res<ReuseIR_RefType, "reinterpreted reference">:$result);
   let arguments = (ins Arg<ReuseIR_TokenType, "Token to reinterpret">:$token);
   let assemblyFormat = [{
-    `(` $token `:` type($token) `)` attr-dict `->` type($result)
+    `(` $token `:` type($token) `)` attr-dict `:` type($result)
   }];
 }
 
@@ -79,7 +79,7 @@ def TokenEnsureOp : ReuseIR_Op<"token.ensure"> {
   let results = (outs Res<ReuseIR_TokenType, "output token", [MemAlloc<DefaultResource>]>:$result);
   let arguments = (ins Arg<ReuseIR_NullableToken, "input token">:$nullableToken);
   let assemblyFormat = [{
-    `(` $nullableToken `:` type($nullableToken) `)` attr-dict `->` type($result)
+    `(` $nullableToken `:` type($nullableToken) `)` attr-dict `:` type($result)
   }];
 }
 
@@ -94,6 +94,53 @@ def TokenReallocOp : ReuseIR_Op<"token.realloc"> {
   let arguments = (ins Arg<ReuseIR_NullableToken, "input token">:$nullableToken);
   let assemblyFormat = [{
     `(` $nullableToken `:` type($nullableToken) `)` attr-dict `->` type($result)
+  }];
+}
+
+def NullableCheckOp : ReuseIR_Op<"nullable.check"> {
+  let summary = "Check the nullibility of a pointer";
+  let description = [{
+    `reuse_ir.nullable.check` returns 1 if target pointer is null or 0 otherwise.
+  }];
+  let results = (outs Res<I1, "result">:$result);
+  let arguments = (ins Arg<ReuseIR_NullableType, "input">:$nullable);
+  let assemblyFormat = [{
+    `(` $nullable `:` type($nullable) `)` attr-dict `->` type($result)
+  }];
+}
+
+def NullableCoerceOp : ReuseIR_Op<"nullable.coerce"> {
+  let summary = "Force unwrap the nullable as a nonnull pointer";
+  let description = [{
+    `reuse_ir.nullable.coerce` forcibly unwrap the nullable as a nonnull pointer.
+  }];
+  let results = (outs Res<AnyTypeOf<[ReuseIR_RcType, ReuseIR_TokenType]>, "result">:$result);
+  let arguments = (ins Arg<ReuseIR_NullableType, "input token">:$nullable);
+  let assemblyFormat = [{
+    `(` $nullable `:` type($nullable) `)` attr-dict `:` type($result)
+  }];
+}
+
+def NullableNullOp : ReuseIR_Op<"nullable.null"> {
+  let summary = "Create a null pointer";
+  let description = [{
+    `reuse_ir.nullable.null` creates a null pointer.
+  }];
+  let results = (outs Res<ReuseIR_NullableType, "result">:$result);
+  let assemblyFormat = [{
+    attr-dict `:` type($result)
+  }];
+}
+
+def NullableNonNullOp : ReuseIR_Op<"nullable.nonnull"> {
+  let summary = "Create a nullable pointer from a nonnull value";
+  let description = [{
+    `reuse_ir.nullable.nonnull` creates a nullable pointer from a nonnull value.
+  }];
+  let results = (outs Res<ReuseIR_NullableType, "result">:$result);
+  let arguments = (ins Arg<AnyTypeOf<[ReuseIR_RcType, ReuseIR_TokenType]>, "pointer">:$pointer);
+  let assemblyFormat = [{
+    `(` $pointer `:` type($pointer) `)` attr-dict `->` type($result)
   }];
 }
 
