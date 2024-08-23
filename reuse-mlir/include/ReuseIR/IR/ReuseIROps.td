@@ -66,7 +66,7 @@ def TokenReinterpretOp : ReuseIR_Op<"token.reinterpret"> {
   let results = (outs Res<ReuseIR_RefType, "reinterpreted reference">:$result);
   let arguments = (ins Arg<ReuseIR_TokenType, "Token to reinterpret">:$token);
   let assemblyFormat = [{
-    `(` $token `:` type($token) `)` attr-dict `->` type($result)
+    `(` $token `:` type($token) `)` attr-dict `:` type($result)
   }];
 }
 
@@ -79,7 +79,7 @@ def TokenEnsureOp : ReuseIR_Op<"token.ensure"> {
   let results = (outs Res<ReuseIR_TokenType, "output token", [MemAlloc<DefaultResource>]>:$result);
   let arguments = (ins Arg<ReuseIR_NullableToken, "input token">:$nullableToken);
   let assemblyFormat = [{
-    `(` $nullableToken `:` type($nullableToken) `)` attr-dict `->` type($result)
+    `(` $nullableToken `:` type($nullableToken) `)` attr-dict `:` type($result)
   }];
 }
 
@@ -117,7 +117,7 @@ def NullableCoerceOp : ReuseIR_Op<"nullable.coerce"> {
   let results = (outs Res<AnyTypeOf<[ReuseIR_RcType, ReuseIR_TokenType]>, "result">:$result);
   let arguments = (ins Arg<ReuseIR_NullableType, "input token">:$nullable);
   let assemblyFormat = [{
-    `(` $nullable `:` type($nullable) `)` attr-dict `->` type($result)
+    `(` $nullable `:` type($nullable) `)` attr-dict `:` type($result)
   }];
 }
 

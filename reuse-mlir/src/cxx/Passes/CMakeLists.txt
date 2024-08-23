@@ -2,6 +2,7 @@ add_mlir_dialect_library(MLIRReuseIRPasses
   STATIC
     ConvertReuseIRToLLVM.cpp
     ReuseIRClosureOutlining.cpp
+    ReuseIRExpandControlFlow.cpp
   DEPENDS
     MLIRReuseIR
     MLIRReuseIRPassIncGen

@@ -151,7 +151,7 @@ void ReuseIRClosureOutliningPass::runOnOperation() {
 
   // Configure rewrite to ignore new ops created during the pass.
   GreedyRewriteConfig config;
-  config.strictMode = GreedyRewriteStrictness::ExistingOps;
+  config.strictMode = GreedyRewriteStrictness::AnyOp;
 
   // Apply patterns.
   if (failed(applyOpPatternsAndFold(ops, std::move(patterns), config)))
