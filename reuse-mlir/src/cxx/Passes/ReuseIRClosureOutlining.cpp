@@ -52,13 +52,14 @@ class ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
         });
     rewriter.inlineBlockBefore(&op->getRegion(0).front(), funcOpBlock,
                                funcOpBlock->end(), args);
-    funcOpBlock->walk([&](ClosureYieldOp yieldOp) {
-      rewriter.replaceOpWithNewOp<func::ReturnOp>(yieldOp,
-                                                  yieldOp.getOperands());
-    });
     rewriter.inlineRegionBefore(op->getRegion(0),
                                 lambdaFuncOp.getFunctionBody(),
                                 lambdaFuncOp.getFunctionBody().end());
+    for (auto &block : lambdaFuncOp.getFunctionBody().getBlocks()) {
+      if (auto yield = dyn_cast_or_null<ClosureYieldOp>(block.getTerminator()))
+        rewriter.replaceOpWithNewOp<func::ReturnOp>(yield,
+                                                    yield->getOperands());
+    }
   }
 
 public:
