@@ -159,12 +159,12 @@ impl Iterator for FieldIterator {
     }
 }
 
-unsafe fn increase_refcnt(mut object: NonNull<FreezableRcBoxHeader>, count: usize) {
-    object.as_mut().status.scalar += count << STATUS_COUNTER_PADDING_BITS;
+unsafe fn increase_refcnt(mut object: NonNull<FreezableRcBoxHeader>) {
+    object.as_mut().status.scalar += 1 << STATUS_COUNTER_PADDING_BITS;
 }
 
-unsafe fn decrease_refcnt(mut object: NonNull<FreezableRcBoxHeader>, count: usize) -> bool {
-    object.as_mut().status.scalar -= count << STATUS_COUNTER_PADDING_BITS;
+unsafe fn decrease_refcnt(mut object: NonNull<FreezableRcBoxHeader>) -> bool {
+    object.as_mut().status.scalar -= 1 << STATUS_COUNTER_PADDING_BITS;
     object.as_mut().status.scalar <= (isize::MIN as usize | 0b11)
 }
 
@@ -218,7 +218,7 @@ unsafe fn dispose(object: NonNull<FreezableRcBoxHeader>) {
                 let next = find_representative(field);
                 match next.as_ref().status.get_kind() {
                     StatusKind::Disposing if field != next => add_stack(&mut scc, field),
-                    StatusKind::Rc if decrease_refcnt(next, 1) => add_stack(&mut dfs, next),
+                    StatusKind::Rc if decrease_refcnt(next) => add_stack(&mut dfs, next),
                     _ => continue,
                 }
             }
@@ -250,7 +250,7 @@ pub unsafe extern "C" fn __reuse_ir_freeze(object: *mut FreezableRcBoxHeader) {
         match object.as_ref().status.get_kind() {
             StatusKind::Rc => {
                 let root = find_representative(object);
-                increase_refcnt(root, 1);
+                increase_refcnt(root);
             }
             StatusKind::Rank => loop {
                 let Some(next) = pending.pop() else {
@@ -282,24 +282,18 @@ pub unsafe extern "C" fn __reuse_ir_freeze_atomic(object: *mut FreezableRcBoxHea
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __reuse_ir_acquire_freezable(
-    object: *mut FreezableRcBoxHeader,
-    count: usize,
-) {
+pub unsafe extern "C" fn __reuse_ir_acquire_freezable(object: *mut FreezableRcBoxHeader) {
     let Some(object) = NonNull::new(object) else {
         panic!("attempt to acquire null object");
     };
     let root = find_representative(object);
-    increase_refcnt(root, count);
+    increase_refcnt(root);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __reuse_ir_release_freezable(
-    object: *mut FreezableRcBoxHeader,
-    count: usize,
-) {
+pub unsafe extern "C" fn __reuse_ir_release_freezable(object: *mut FreezableRcBoxHeader) {
     if let Some(object) = NonNull::new(object) {
-        if decrease_refcnt(object, count) {
+        if decrease_refcnt(object) {
             dispose(object);
         }
     } else {

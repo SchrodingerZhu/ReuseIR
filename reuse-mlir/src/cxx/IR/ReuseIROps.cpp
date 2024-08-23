@@ -23,13 +23,11 @@ mlir::reuse_ir::LogicalResult BorrowOp::verify() {
                      "pointee type with the RC pointer");
   return mlir::reuse_ir::success();
 }
-// IncOp
-mlir::reuse_ir::LogicalResult IncOp::verify() {
+// RcAcquireOp
+mlir::reuse_ir::LogicalResult RcAcquireOp::verify() {
   RcType rcPtrTy = getRcPtr().getType();
   if (rcPtrTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
-    return emitOpError("cannot increase a non-frozen but freezable RC pointer");
-  if (getCount() && *getCount() == 0)
-    return emitError("the amount of increment must be non-zero");
+    return emitOpError("cannot be applied to an unfrozen RC pointer");
   return mlir::reuse_ir::success();
 }
 // ValueToRefOp
