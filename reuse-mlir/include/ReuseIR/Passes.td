@@ -24,4 +24,13 @@ def ReuseIRClosureOutlining : Pass<"reuse-ir-closure-outlining", "::mlir::Module
   let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
 }
 
+def ReuseIRExpandNullability : Pass<"reuse-ir-expand-nullability", "::mlir::ModuleOp"> {
+  let summary = "Expand structured control flows for nullibility checking";
+  let description = [{
+    This pass is used to expand hidden control flows needed for nullibility checking.
+  }];
+  let constructor = "::mlir::reuse_ir::createReuseIRClosureOutliningPass()";
+  let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
+}
+
 #endif // REUSE_IR_PASSES
