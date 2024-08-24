@@ -38,8 +38,6 @@ __reuse_ir_realloc_nocopy_impl(void *ptr, size_t old_size, size_t alignment,
   if (size_to_sizeclass_full(aligned_old_size).raw() ==
       size_to_sizeclass_full(aligned_new_size).raw())
     return ptr;
-  void *p = ThreadAlloc::get().alloc(aligned_new_size);
-  if (p)
-    ThreadAlloc::get().dealloc(ptr, aligned_old_size);
-  return p;
+  ThreadAlloc::get().dealloc(ptr, aligned_old_size);
+  return ThreadAlloc::get().alloc(aligned_new_size);
 }
