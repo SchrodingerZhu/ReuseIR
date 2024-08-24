@@ -2,6 +2,7 @@
 name = "reuse-runtime"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 [lib]
 crate-type = ["cdylib", "staticlib"]
@@ -9,3 +10,10 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 smallvec = "1.13.2"
 stacker = "0.1.15"
+
+[features]
+default = ["snmalloc"]
+snmalloc = ["dep:cmake"]
+
+[build-dependencies]
+cmake = { version = "0.1.51", optional = true }
