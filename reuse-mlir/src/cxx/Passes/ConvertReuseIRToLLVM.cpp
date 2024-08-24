@@ -4,9 +4,11 @@
 #include "ReuseIR/IR/ReuseIRTypes.h"
 #include "ReuseIR/Interfaces/ReuseIRCompositeLayoutInterface.h"
 #include "ReuseIR/Passes.h"
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -238,6 +240,34 @@ public:
   }
 };
 
+class NullableCheckOpLowering
+    : public mlir::OpConversionPattern<NullableCheckOp> {
+public:
+  using OpConversionPattern<NullableCheckOp>::OpConversionPattern;
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      NullableCheckOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto zeroPtr = rewriter.create<mlir::LLVM::ZeroOp>(op->getLoc(), ptrTy);
+    rewriter.replaceOpWithNewOp<mlir::LLVM::ICmpOp>(
+        op, rewriter.getI1Type(), LLVM::ICmpPredicate::ne,
+        adaptor.getNullable(), zeroPtr);
+    return mlir::reuse_ir::success();
+  }
+};
+
+class NullableCoerceOpLowering
+    : public mlir::OpConversionPattern<NullableCoerceOp> {
+public:
+  using OpConversionPattern<NullableCoerceOp>::OpConversionPattern;
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      NullableCoerceOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    rewriter.replaceOp(op, adaptor.getNullable());
+    return mlir::reuse_ir::success();
+  }
+};
+
 class TokenFreeOpLowering : public mlir::OpConversionPattern<TokenFreeOp> {
 public:
   using OpConversionPattern<TokenFreeOp>::OpConversionPattern;
@@ -358,8 +388,10 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   CompositeLayoutCache cache(dataLayout);
   populateLLVMTypeConverter(cache, converter);
   mlir::RewritePatternSet patterns(&getContext());
+  mlir::cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
-  patterns.add<RcAcquireOpLowering, TokenAllocOpLowering, TokenFreeOpLowering>(
+  patterns.add<RcAcquireOpLowering, TokenAllocOpLowering, TokenFreeOpLowering,
+               NullableCoerceOpLowering, NullableCheckOpLowering>(
       converter, &getContext());
   patterns
       .add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
