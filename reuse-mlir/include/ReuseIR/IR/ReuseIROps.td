@@ -140,7 +140,7 @@ def NullableNonNullOp : ReuseIR_Op<"nullable.nonnull"> {
   let results = (outs Res<ReuseIR_NullableType, "result">:$result);
   let arguments = (ins Arg<AnyTypeOf<[ReuseIR_RcType, ReuseIR_TokenType]>, "pointer">:$pointer);
   let assemblyFormat = [{
-    `(` $pointer `:` type($pointer) `)` attr-dict `->` type($result)
+    `(` $pointer `:` type($pointer) `)` attr-dict `:` type($result)
   }];
 }
 

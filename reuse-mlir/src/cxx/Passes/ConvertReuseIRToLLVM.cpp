@@ -29,6 +29,18 @@ namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
 
 template <typename Op>
+class TypeCoercionLowering : public mlir::OpConversionPattern<Op> {
+public:
+  using OpConversionPattern<Op>::OpConversionPattern;
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      Op op, OpConversionPattern<Op>::OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    rewriter.replaceOp(op, adaptor.getOperands()[0]);
+    return mlir::reuse_ir::success();
+  }
+};
+
+template <typename Op>
 class ReuseIRConvPatternWithLayoutCache : public mlir::OpConversionPattern<Op> {
 protected:
   CompositeLayoutCache &cache;
@@ -256,14 +268,18 @@ public:
   }
 };
 
-class NullableCoerceOpLowering
-    : public mlir::OpConversionPattern<NullableCoerceOp> {
+using NullableCoerceOpLowering = TypeCoercionLowering<NullableCoerceOp>;
+using NullableNonNullOpLowering = TypeCoercionLowering<NullableNonNullOp>;
+
+class NullableNullOpLowering
+    : public mlir::OpConversionPattern<NullableNullOp> {
 public:
-  using OpConversionPattern<NullableCoerceOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
   mlir::reuse_ir::LogicalResult matchAndRewrite(
-      NullableCoerceOp op, OpAdaptor adaptor,
+      NullableNullOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
-    rewriter.replaceOp(op, adaptor.getNullable());
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    rewriter.replaceOpWithNewOp<LLVM::ZeroOp>(op, ptrTy);
     return mlir::reuse_ir::success();
   }
 };
@@ -391,7 +407,8 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   mlir::cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
   patterns.add<RcAcquireOpLowering, TokenAllocOpLowering, TokenFreeOpLowering,
-               NullableCoerceOpLowering, NullableCheckOpLowering>(
+               NullableCoerceOpLowering, NullableCheckOpLowering,
+               NullableNonNullOpLowering, NullableNullOpLowering>(
       converter, &getContext());
   patterns
       .add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
