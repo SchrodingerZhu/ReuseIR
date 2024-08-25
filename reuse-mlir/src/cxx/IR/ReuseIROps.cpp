@@ -53,8 +53,8 @@ mlir::reuse_ir::LogicalResult ProjOp::verify() {
   auto targetType =
       llvm::TypeSwitch<mlir::Type, mlir::Type>(input.getPointee())
           .Case<CompositeType>([&](const CompositeType &ty) {
-            size_t size = ty.getMemberTypes().size();
-            return getIndex() < size ? ty.getMemberTypes()[getIndex()]
+            size_t size = ty.getMembers().size();
+            return getIndex() < size ? ty.getMembers()[getIndex()]
                                      : mlir::Type{};
           })
           .Case<ArrayType>([&](const ArrayType &ty) {

@@ -213,25 +213,6 @@ UnionType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
   return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
-// Composite DataLayoutInterface:
-::llvm::TypeSize CompositeType::getTypeSizeInBits(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getSize() * 8;
-}
-
-uint64_t CompositeType::getABIAlignment(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getAlignment().value();
-}
-
-uint64_t CompositeType::getPreferredAlignment(
-    const ::mlir::DataLayout &dataLayout,
-    ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getAlignment().value();
-}
-
 // Token Verifier:
 ::mlir::reuse_ir::LogicalResult
 TokenType::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
@@ -250,10 +231,160 @@ void TokenType::formatMangledNameTo(::llvm::raw_string_ostream &buffer) const {
   buffer << "5TokenILm" << getSize() << "Elm" << getAlignment() << "EE";
 }
 
-::mlir::reuse_ir::LogicalResult CompositeType::verify(
-    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
-    ::llvm::ArrayRef<mlir::Type> memberTypes) {
-  for (auto type : memberTypes) {
+void ReuseIRDialect::registerTypes() {
+  (void)generatedTypePrinter;
+  (void)generatedTypeParser;
+  // Register tablegen'd types.
+  addTypes<CompositeType,
+#define GET_TYPEDEF_LIST
+#include "ReuseIR/IR/ReuseIROpsTypes.cpp.inc"
+           >();
+}
+} // namespace REUSE_IR_DECL_SCOPE
+} // namespace mlir
+
+namespace mlir {
+namespace reuse_ir {
+
+Type ReuseIRDialect::parseType(DialectAsmParser &parser) const {
+  llvm::SMLoc typeLoc = parser.getCurrentLocation();
+  StringRef mnemonic;
+  Type genType;
+
+  // Try to parse as a tablegen'd type.
+  OptionalParseResult parseResult =
+      generatedTypeParser(parser, &mnemonic, genType);
+  if (parseResult.has_value())
+    return genType;
+
+  // Type is not tablegen'd: try to parse as a raw C++ type.
+  return StringSwitch<function_ref<Type()>>(mnemonic)
+      .Case("composite", [&] { return CompositeType::parse(parser); })
+      .Default([&] {
+        parser.emitError(typeLoc) << "unknown reuse_ir type: " << mnemonic;
+        return Type();
+      })();
+}
+
+void ReuseIRDialect::printType(Type type, DialectAsmPrinter &os) const {
+  // Try to print as a tablegen'd type.
+  if (generatedTypePrinter(type, os).succeeded())
+    return;
+
+  // Type is not tablegen'd: try printing as a raw C++ type.
+  TypeSwitch<Type>(type)
+      .Case<CompositeType>([&](CompositeType type) {
+        os << type.getMnemonic();
+        type.print(os);
+      })
+      .Default([](Type) {
+        llvm::report_fatal_error("printer is missing a handler for this type");
+      });
+}
+
+Type CompositeType::parse(mlir::AsmParser &parser) {
+  FailureOr<AsmParser::CyclicParseReset> cyclicParseGuard;
+  const auto loc = parser.getCurrentLocation();
+  const auto eLoc = parser.getEncodedSourceLoc(loc);
+  auto *context = parser.getContext();
+
+  if (parser.parseLess())
+    return {};
+
+  mlir::StringAttr name;
+  parser.parseOptionalAttribute(name);
+
+  // Is a self reference: ensure referenced type was parsed.
+  if (name && parser.parseOptionalGreater().succeeded()) {
+    auto type = getChecked(eLoc, context, name);
+    if (succeeded(parser.tryStartCyclicParse(type))) {
+      parser.emitError(loc, "invalid self-reference within composite type");
+      return {};
+    }
+    return type;
+  }
+
+  // Is a named composite definition: ensure name has not been parsed yet.
+  if (name) {
+    auto type = getChecked(eLoc, context, name);
+    cyclicParseGuard = parser.tryStartCyclicParse(type);
+    if (failed(cyclicParseGuard)) {
+      parser.emitError(loc, "composite already defined");
+      return {};
+    }
+  }
+
+  // Parse record members or lack thereof.
+  bool incomplete = true;
+  llvm::SmallVector<mlir::Type> members;
+  if (parser.parseOptionalKeyword("incomplete").failed()) {
+    incomplete = false;
+    const auto delimiter = AsmParser::Delimiter::Braces;
+    const auto parseElementFn = [&parser, &members]() {
+      return parser.parseType(members.emplace_back());
+    };
+    if (parser.parseCommaSeparatedList(delimiter, parseElementFn).failed())
+      return {};
+  }
+
+  if (parser.parseGreater())
+    return {};
+
+  // Try to create the proper record type.
+  ArrayRef<mlir::Type> membersRef(members); // Needed for template deduction.
+  mlir::Type type = {};
+  if (name && incomplete) { // Identified & incomplete
+    type = getChecked(eLoc, context, name);
+  } else if (name && !incomplete) { // Identified & complete
+    type = getChecked(eLoc, context, membersRef, name);
+    // If the record has a self-reference, its type already exists in a
+    // incomplete state. In this case, we must complete it.
+    if (mlir::cast<CompositeType>(type).isIncomplete())
+      mlir::cast<CompositeType>(type).complete(membersRef);
+  } else if (!name && !incomplete) { // anonymous & complete
+    type = getChecked(eLoc, context, membersRef);
+  } else { // anonymous & incomplete
+    parser.emitError(loc, "anonymous composite types must be complete");
+    return {};
+  }
+
+  return type;
+}
+
+void CompositeType::print(mlir::AsmPrinter &printer) const {
+  FailureOr<AsmPrinter::CyclicPrintReset> cyclicPrintGuard;
+  printer << '<';
+
+  if (getName())
+    printer << getName();
+
+  // Current type has already been printed: print as self reference.
+  cyclicPrintGuard = printer.tryStartCyclicPrint(*this);
+  if (failed(cyclicPrintGuard)) {
+    printer << '>';
+    return;
+  }
+
+  // Type not yet printed: continue printing the entire record.
+  if (getName())
+    printer << ' ';
+
+  if (isIncomplete()) {
+    printer << "incomplete";
+  } else {
+    printer << "{";
+    llvm::interleaveComma(getMembers(), printer);
+    printer << "}";
+  }
+
+  printer << '>';
+}
+
+mlir::LogicalResult
+CompositeType::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+                      llvm::ArrayRef<mlir::Type> members, mlir::StringAttr name,
+                      bool incomplete) {
+  for (auto type : members) {
     if (llvm::isa<RefType>(type))
       return emitError() << "cannot have a reference type in a composite type";
     if (auto rcTy = llvm::dyn_cast<RcType>(type)) {
@@ -262,23 +393,92 @@ void TokenType::formatMangledNameTo(::llvm::raw_string_ostream &buffer) const {
                               "in a composite type, use mref instead";
     }
   }
-  return ::mlir::reuse_ir::success();
+  if (name && name.getValue().empty()) {
+    emitError() << "an identified composite type cannot have an empty name";
+    return mlir::failure();
+  }
+  return mlir::success();
 }
 
-void ReuseIRDialect::registerTypes() {
-  (void)generatedTypePrinter;
-  (void)generatedTypeParser;
-  // Register tablegen'd types.
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "ReuseIR/IR/ReuseIROpsTypes.cpp.inc"
-      >();
+CompositeType CompositeType::get(::mlir::MLIRContext *context,
+                                 ArrayRef<Type> members, StringAttr name) {
+  return Base::get(context, members, name, false);
 }
-} // namespace REUSE_IR_DECL_SCOPE
-} // namespace mlir
 
-namespace mlir {
-namespace reuse_ir {
+CompositeType CompositeType::getChecked(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    ::mlir::MLIRContext *context, ArrayRef<Type> members, StringAttr name) {
+  if (failed(verify(emitError, members, name, /*incomplete=*/false)))
+    return {};
+  return Base::getChecked(emitError, context, members, name,
+                          /*incomplete=*/false);
+}
+
+CompositeType CompositeType::get(::mlir::MLIRContext *context,
+                                 StringAttr name) {
+  return Base::get(context, /*members=*/ArrayRef<Type>{}, name,
+                   /*incomplete=*/true);
+}
+
+CompositeType CompositeType::getChecked(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    ::mlir::MLIRContext *context, StringAttr name) {
+  if (failed(verify(emitError, /*members=*/ArrayRef<Type>{}, name,
+                    /*incomplete=*/true)))
+    return {};
+  return Base::getChecked(emitError, context, ArrayRef<Type>{}, name,
+                          /*incomplete=*/true);
+}
+
+CompositeType CompositeType::get(::mlir::MLIRContext *context,
+                                 ArrayRef<Type> members) {
+  return Base::get(context, members, StringAttr{}, /*incomplete=*/false);
+}
+
+CompositeType CompositeType::getChecked(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    ::mlir::MLIRContext *context, ArrayRef<Type> members) {
+  if (failed(verify(emitError, members, StringAttr{}, /*incomplete=*/false)))
+    return {};
+  return Base::getChecked(emitError, context, members, StringAttr{},
+                          /*incomplete=*/false);
+}
+
+::llvm::ArrayRef<mlir::Type> CompositeType::getMembers() const {
+  return getImpl()->members;
+}
+
+bool CompositeType::isIncomplete() const { return getImpl()->incomplete; }
+
+mlir::StringAttr CompositeType::getName() const { return getImpl()->name; }
+
+bool CompositeType::getIncomplete() const { return getImpl()->incomplete; }
+
+void CompositeType::complete(ArrayRef<Type> members) {
+  if (mutate(members).failed())
+    llvm_unreachable("failed to complete struct");
+}
+
+llvm::TypeSize
+CompositeType::getTypeSizeInBits(const DataLayout &dataLayout,
+                                 DataLayoutEntryListRef params) const {
+  return getCompositeLayout(dataLayout).getSize() * 8;
+}
+uint64_t CompositeType::getABIAlignment(const DataLayout &dataLayout,
+                                        DataLayoutEntryListRef params) const {
+  return getCompositeLayout(dataLayout).getAlignment().value();
+}
+uint64_t
+CompositeType::getPreferredAlignment(const DataLayout &dataLayout,
+                                     DataLayoutEntryListRef params) const {
+  return getCompositeLayout(dataLayout).getAlignment().value();
+}
+// CompositeLayoutInterface methods.
+::mlir::reuse_ir::CompositeLayout
+CompositeType::getCompositeLayout(::mlir::DataLayout layout) const {
+  return {layout, getMembers()};
+}
+
 // ReuseIRCompositeLayoutInterface
 ::mlir::reuse_ir::CompositeLayout
 RcBoxType::getCompositeLayout(::mlir::DataLayout layout) const {
@@ -314,11 +514,6 @@ UnionType::getCompositeLayout(::mlir::DataLayout layout) const {
       mlir::IntegerType::get(getContext(), 8), dataAlign.value());
   auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
   return {layout, {tagType, dataArea}};
-}
-
-::mlir::reuse_ir::CompositeLayout
-CompositeType::getCompositeLayout(::mlir::DataLayout layout) const {
-  return {layout, getMemberTypes()};
 }
 
 ::mlir::reuse_ir::CompositeLayout

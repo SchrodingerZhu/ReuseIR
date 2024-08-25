@@ -3,10 +3,10 @@
 !closure = !reuse_ir.closure<(i32, i128) -> i128>
 module @test attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<f80, dense<128> : vector<2xi64>>, #dlti.dl_entry<i128, dense<128> : vector<2xi64>>, #dlti.dl_entry<i32, dense<32> : vector<2xi64>>, #dlti.dl_entry<f128, dense<128> : vector<2xi64>>, #dlti.dl_entry<f64, dense<64> : vector<2xi64>>, #dlti.dl_entry<f16, dense<16> : vector<2xi64>>, #dlti.dl_entry<i1, dense<8> : vector<2xi64>>, #dlti.dl_entry<!llvm.ptr, dense<64> : vector<4xi64>>, #dlti.dl_entry<!llvm.ptr<270>, dense<32> : vector<4xi64>>, #dlti.dl_entry<i8, dense<8> : vector<2xi64>>, #dlti.dl_entry<i16, dense<16> : vector<2xi64>>, #dlti.dl_entry<!llvm.ptr<272>, dense<64> : vector<4xi64>>, #dlti.dl_entry<!llvm.ptr<271>, dense<32> : vector<4xi64>>, #dlti.dl_entry<i64, dense<64> : vector<2xi64>>, #dlti.dl_entry<"dlti.stack_alignment", 128 : i64>, #dlti.dl_entry<"dlti.endianness", "little">>, llvm.data_layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"} 
 {
-    // CHECK-OUTLINING: func.func private @closure_test$$lambda0$$func(%arg0: !reuse_ir.ref<!reuse_ir.composite<i32, i128>, nonfreezing>) -> i128 {
-    // CHECK-OUTLINING:   %[[REG0:[0-9a-z]+]] = reuse_ir.proj %arg0[0] : <!reuse_ir.composite<i32, i128>, nonfreezing> -> <i32, nonfreezing>
+    // CHECK-OUTLINING: func.func private @closure_test$$lambda0$$func(%arg0: !reuse_ir.ref<!reuse_ir.composite<{i32, i128}>, nonfreezing>) -> i128 {
+    // CHECK-OUTLINING:   %[[REG0:[0-9a-z]+]] = reuse_ir.proj %arg0[0] : <!reuse_ir.composite<{i32, i128}>, nonfreezing> -> <i32, nonfreezing>
     // CHECK-OUTLINING:   %[[REG1:[0-9a-z]+]] = reuse_ir.load %[[REG0]] : <i32, nonfreezing> -> i32
-    // CHECK-OUTLINING:   %[[REG2:[0-9a-z]+]] = reuse_ir.proj %arg0[1] : <!reuse_ir.composite<i32, i128>, nonfreezing> -> <i128, nonfreezing>
+    // CHECK-OUTLINING:   %[[REG2:[0-9a-z]+]] = reuse_ir.proj %arg0[1] : <!reuse_ir.composite<{i32, i128}>, nonfreezing> -> <i128, nonfreezing>
     // CHECK-OUTLINING:   %[[REG3:[0-9a-z]+]] = reuse_ir.load %[[REG2]] : <i128, nonfreezing> -> i128
     // CHECK-OUTLINING:   %[[REG4:[0-9a-z]+]] = arith.extui %[[REG1]] : i32 to i128
     // CHECK-OUTLINING:   %[[REG5:[0-9a-z]+]] = arith.addi %[[REG4]], %[[REG3]] : i128

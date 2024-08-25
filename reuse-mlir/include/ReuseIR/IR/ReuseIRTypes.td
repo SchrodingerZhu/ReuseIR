@@ -253,27 +253,9 @@ def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
   }];
 }
 
-def ReuseIR_CompositeType : ReuseIR_Type<"Composite", "composite",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
 
-  let summary = "ReuseIR Composite Type";
-  let description = [{
-    `reuse_ir.composite` is a composite type of other types.
-    struct {
-      Types...;
-    }
-  }];
-
-  let parameters = (ins
-    ArrayRefParameter<"mlir::Type">:$memberTypes
-  );
-
-  let assemblyFormat = [{
-    `<` $memberTypes `>`
-  }];
-
-  let genVerifyDecl = 1;
-}
+def ReuseIR_CompositeType : Type<CPred<"::mlir::isa<::mlir::cir::CompositeType>($_self)">,
+                          "ReuseIR composite type">;
 
 def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",
     [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
