@@ -64,6 +64,38 @@ public:
   }
 };
 
+class RcReleaseExpansionPattern : public OpRewritePattern<RcReleaseOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(RcReleaseOp op,
+                                PatternRewriter &rewriter) const final {
+    RcType rcTy = op.getRcPtr().getType();
+    // we only need to expand for nonfreezing RC pointers
+    if (rcTy.getFreezingKind().getValue() != FreezingKind::nonfreezing)
+      return LogicalResult::failure();
+    auto decreaseOp =
+        rewriter.create<RcDecreaseOp>(op->getLoc(), op.getRcPtr());
+    rewriter.replaceOpWithNewOp<scf::IfOp>(
+        op, decreaseOp,
+        [&](OpBuilder &builder, Location loc) {
+          auto refTy = RefType::get(getContext(), rcTy.getPointee(),
+                                    rcTy.getFreezingKind());
+          auto borrowed = builder.create<RcBorrowOp>(loc, refTy, op.getRcPtr());
+          builder.create<DestroyOp>(loc, borrowed);
+          auto resTy = cast<NullableType>(op.getResultTypes()[0]);
+          auto token = builder.create<RcTokenizeOp>(loc, resTy.getPointer(),
+                                                    op.getRcPtr());
+          auto nonnull = builder.create<NullableNonNullOp>(loc, resTy, token);
+          builder.create<scf::YieldOp>(loc, nonnull->getResults());
+        },
+        [&](OpBuilder &builder, Location loc) {
+          auto null = builder.create<NullableNullOp>(loc, op.getResultTypes());
+          builder.create<scf::YieldOp>(loc, null->getResults());
+        });
+    return LogicalResult::success();
+  }
+};
+
 struct ReuseIRExpandControlFlowPass
     : public ReuseIRExpandControlFlowBase<ReuseIRExpandControlFlowPass> {
   using ReuseIRExpandControlFlowBase::ReuseIRExpandControlFlowBase;
@@ -74,13 +106,13 @@ void ReuseIRExpandControlFlowPass::runOnOperation() {
   auto module = getOperation();
   // Collect rewrite patterns.
   RewritePatternSet patterns(&getContext());
-  patterns.add<TokenEnsureExpansionPattern, TokenFreeExpansionPattern>(
-      &getContext());
+  patterns.add<TokenEnsureExpansionPattern, TokenFreeExpansionPattern,
+               RcReleaseExpansionPattern>(&getContext());
 
   // Collect operations to be considered by the pass.
   SmallVector<Operation *, 16> ops;
   module->walk([&](Operation *op) {
-    if (isa<TokenEnsureOp, TokenFreeOp>(op))
+    if (isa<TokenEnsureOp, TokenFreeOp, RcReleaseOp>(op))
       ops.push_back(op);
   });
 

@@ -56,6 +56,21 @@ public:
         cache(cache) {}
 };
 
+class DestroyOpLowering : public ReuseIRConvPatternWithLayoutCache<DestroyOp> {
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      DestroyOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    if (op.getObject().getType().getPointee().isIntOrIndexOrFloat())
+      rewriter.eraseOp(op);
+    else
+      llvm_unreachable("unimplemented");
+    return mlir::reuse_ir::success();
+  }
+};
+
 class ClosureVTableOpLowering
     : public ReuseIRConvPatternWithLayoutCache<ClosureVTableOp> {
 public:
@@ -189,7 +204,8 @@ public:
   }
 };
 
-class BorrowOpLowering : public ReuseIRConvPatternWithLayoutCache<BorrowOp> {
+class RcBorrowOpLowering
+    : public ReuseIRConvPatternWithLayoutCache<RcBorrowOp> {
   static inline constexpr size_t NONFREEZING_DATA_OFFSET = 1;
   static inline constexpr size_t FREEZABLE_DATA_OFFSET = 3;
 
@@ -197,7 +213,7 @@ public:
   using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
 
   mlir::reuse_ir::LogicalResult matchAndRewrite(
-      BorrowOp op, OpAdaptor adaptor,
+      RcBorrowOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
     RcType rcTy = op.getObject().getType();
     RcBoxType box =
@@ -270,6 +286,7 @@ public:
 
 using NullableCoerceOpLowering = TypeCoercionLowering<NullableCoerceOp>;
 using NullableNonNullOpLowering = TypeCoercionLowering<NullableNonNullOp>;
+using RcTokenizeOpLowering = TypeCoercionLowering<RcTokenizeOp>;
 
 class NullableNullOpLowering
     : public mlir::OpConversionPattern<NullableNullOp> {
@@ -349,6 +366,69 @@ public:
   }
 };
 
+class RcReleaseOpLowering : public mlir::OpConversionPattern<RcReleaseOp> {
+public:
+  using OpConversionPattern<RcReleaseOp>::OpConversionPattern;
+
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      RcReleaseOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    RcType rcTy = op.getRcPtr().getType();
+    // we should have already expanded nonfreezing RC pointers
+    if (rcTy.getFreezingKind().getValue() == FreezingKind::nonfreezing)
+      return LogicalResult::failure();
+    // call the runtime function to decrease the reference count
+    llvm::StringRef func = rcTy.getAtomicKind().getValue() == AtomicKind::atomic
+                               ? "__reuse_ir_release_atomic_freezable"
+                               : "__reuse_ir_release_freezable";
+    rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
+        op, func, mlir::ValueRange{}, mlir::ValueRange{adaptor.getRcPtr()});
+    return LogicalResult::success();
+  }
+};
+
+class RcDecreaseOpLowering : public mlir::OpConversionPattern<RcDecreaseOp> {
+public:
+  using OpConversionPattern<RcDecreaseOp>::OpConversionPattern;
+
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      RcDecreaseOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    RcType rcPtrTy = op.getRcPtr().getType();
+    mlir::reuse_ir::RcBoxType rcBoxTy =
+        RcBoxType::get(getContext(), rcPtrTy.getPointee(),
+                       rcPtrTy.getAtomicKind(), rcPtrTy.getFreezingKind());
+    auto boxStruct = llvm::cast<mlir::LLVM::LLVMStructType>(
+        typeConverter->convertType(rcBoxTy));
+    auto rcTy = boxStruct.getBody()[0];
+    if (rcPtrTy.getFreezingKind().getValue() != FreezingKind::nonfreezing) {
+      return LogicalResult::failure();
+    } else {
+      auto amount =
+          rewriter.create<mlir::LLVM::ConstantOp>(op.getLoc(), rcTy, 1);
+      auto rcField = rewriter.create<mlir::LLVM::GEPOp>(
+          op.getLoc(), mlir::LLVM::LLVMPointerType::get(getContext()),
+          boxStruct, adaptor.getRcPtr(), mlir::LLVM::GEPArg{0});
+      mlir::Value rcVal;
+      if (rcPtrTy.getAtomicKind().getValue() == AtomicKind::atomic) {
+        rcVal = rewriter.create<mlir::LLVM::AtomicRMWOp>(
+            op->getLoc(), mlir::LLVM::AtomicBinOp::sub, rcField, amount,
+            mlir::LLVM::AtomicOrdering::seq_cst);
+      } else {
+        rcVal = rewriter.create<mlir::LLVM::LoadOp>(op.getLoc(), rcTy, rcField);
+        auto newRcVal =
+            rewriter.create<mlir::LLVM::SubOp>(op.getLoc(), rcTy, rcVal, amount)
+                .getRes();
+        rewriter.create<mlir::LLVM::StoreOp>(op->getLoc(), newRcVal, rcField);
+      }
+      rewriter.replaceOpWithNewOp<mlir::LLVM::ICmpOp>(
+          op, rewriter.getI1Type(), LLVM::ICmpPredicate::eq, rcVal,
+          rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), rcTy, 1));
+    }
+    return mlir::reuse_ir::success();
+  }
+};
+
 struct ConvertReuseIRToLLVMPass
     : public ConvertReuseIRToLLVMBase<ConvertReuseIRToLLVMPass> {
   using ConvertReuseIRToLLVMBase::ConvertReuseIRToLLVMBase;
@@ -370,6 +450,16 @@ static void emitRuntimeFunctions(mlir::Location loc,
       builder.getFunctionType({ptrTy}, {}), builder.getStringAttr("private"),
       nullptr, nullptr);
   atomicAcquireFreezable.setArgAttr(0, "llvm.nonnull", builder.getUnitAttr());
+  auto releaseFreezable = builder.create<mlir::func::FuncOp>(
+      loc, builder.getStringAttr("__reuse_ir_release_freezable"),
+      builder.getFunctionType({ptrTy}, {}), builder.getStringAttr("private"),
+      nullptr, nullptr);
+  releaseFreezable.setArgAttr(0, "llvm.nonnull", builder.getUnitAttr());
+  auto atomicReleaseFreezable = builder.create<mlir::func::FuncOp>(
+      loc, builder.getStringAttr("__reuse_ir_release_atomic_freezable"),
+      builder.getFunctionType({ptrTy}, {}), builder.getStringAttr("private"),
+      nullptr, nullptr);
+  atomicReleaseFreezable.setArgAttr(0, "llvm.nonnull", builder.getUnitAttr());
   auto alloc = builder.create<mlir::func::FuncOp>(
       loc, builder.getStringAttr("__reuse_ir_alloc"),
       builder.getFunctionType({targetIdxTy, targetIdxTy}, {ptrTy}),
@@ -406,14 +496,16 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   mlir::RewritePatternSet patterns(&getContext());
   mlir::cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
-  patterns.add<RcAcquireOpLowering, TokenAllocOpLowering, TokenFreeOpLowering,
-               NullableCoerceOpLowering, NullableCheckOpLowering,
-               NullableNonNullOpLowering, NullableNullOpLowering>(
-      converter, &getContext());
   patterns
-      .add<BorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
-           LoadOpLowering, ClosureVTableOpLowering, ClosureAssembleOpLowering>(
-          cache, converter, &getContext());
+      .add<RcAcquireOpLowering, RcDecreaseOpLowering, RcReleaseOpLowering,
+           TokenAllocOpLowering, TokenFreeOpLowering, NullableCoerceOpLowering,
+           NullableCheckOpLowering, NullableNonNullOpLowering,
+           NullableNullOpLowering, RcTokenizeOpLowering>(converter,
+                                                         &getContext());
+  patterns.add<RcBorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
+               LoadOpLowering, ClosureVTableOpLowering,
+               ClosureAssembleOpLowering, DestroyOpLowering>(cache, converter,
+                                                             &getContext());
   mlir::ConversionTarget target(getContext());
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalOp<mlir::ModuleOp>();
