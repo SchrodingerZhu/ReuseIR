@@ -348,7 +348,7 @@ public:
           rewriter.create<mlir::LLVM::ConstantOp>(op.getLoc(), rcTy, 1);
       auto rcField = rewriter.create<mlir::LLVM::GEPOp>(
           op.getLoc(), mlir::LLVM::LLVMPointerType::get(getContext()),
-          boxStruct, adaptor.getRcPtr(), mlir::LLVM::GEPArg{0});
+          boxStruct, adaptor.getRcPtr(), ArrayRef<LLVM::GEPArg>{0, 0});
       if (rcPtrTy.getAtomicKind().getValue() == AtomicKind::atomic) {
         rewriter.replaceOpWithNewOp<mlir::LLVM::AtomicRMWOp>(
             op, mlir::LLVM::AtomicBinOp::add, rcField, amount,
@@ -408,7 +408,7 @@ public:
           rewriter.create<mlir::LLVM::ConstantOp>(op.getLoc(), rcTy, 1);
       auto rcField = rewriter.create<mlir::LLVM::GEPOp>(
           op.getLoc(), mlir::LLVM::LLVMPointerType::get(getContext()),
-          boxStruct, adaptor.getRcPtr(), mlir::LLVM::GEPArg{0});
+          boxStruct, adaptor.getRcPtr(), ArrayRef<LLVM::GEPArg>{0, 0});
       mlir::Value rcVal;
       if (rcPtrTy.getAtomicKind().getValue() == AtomicKind::atomic) {
         rcVal = rewriter.create<mlir::LLVM::AtomicRMWOp>(
