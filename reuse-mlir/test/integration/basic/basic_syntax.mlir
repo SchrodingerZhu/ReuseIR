@@ -22,7 +22,7 @@ module @test {
         return
     }
     func.func @projection(%0: !reuse_ir.rc<!test, nonatomic, nonfreezing>) {
-        %1 = reuse_ir.borrow %0 : 
+        %1 = reuse_ir.rc.borrow %0 : 
             !reuse_ir.rc<!test, nonatomic, nonfreezing>
             -> !reuse_ir.ref<!test, nonfreezing>
         %2 = reuse_ir.proj %1[0] : 

@@ -12,7 +12,7 @@
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
 // BorrowOp
-mlir::reuse_ir::LogicalResult BorrowOp::verify() {
+mlir::reuse_ir::LogicalResult RcBorrowOp::verify() {
   RcType input = getObject().getType();
   RefType output = getType();
   if (input.getFreezingKind() != output.getFreezingKind())
@@ -134,6 +134,30 @@ mlir::reuse_ir::LogicalResult ClosureYieldOp::verify() {
     return emitOpError("expected to yield a value of ")
            << closureTy.getOutputType() << ", but " << getValue().getType()
            << " is found instead";
+  return mlir::reuse_ir::success();
+}
+
+// RcReleaseOp
+mlir::reuse_ir::LogicalResult RcReleaseOp::verify() {
+  RcType rcPtrTy = getRcPtr().getType();
+  if (rcPtrTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
+    return emitOpError("cannot be applied to an unfrozen RC pointer");
+  if (rcPtrTy.getFreezingKind().getValue() == FreezingKind::frozen &&
+      getNumResults() > 0)
+    return emitOpError("cannot have any result when applied to a frozen RC "
+                       "pointer");
+  if (rcPtrTy.getFreezingKind().getValue() == FreezingKind::nonfreezing &&
+      getNumResults() != 1)
+    return emitOpError("must have a result when applied to a nonfreezing RC "
+                       "pointer");
+  return mlir::reuse_ir::success();
+}
+
+// RcDecreaseOp
+mlir::reuse_ir::LogicalResult RcDecreaseOp::verify() {
+  RcType rcPtrTy = getRcPtr().getType();
+  if (rcPtrTy.getFreezingKind().getValue() != FreezingKind::nonfreezing)
+    return emitOpError("can only be applied to a nonfreezing RC pointer");
   return mlir::reuse_ir::success();
 }
 

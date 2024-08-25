@@ -163,6 +163,39 @@ def RcAcquireOp : ReuseIR_Op<"rc.acquire"> {
   let hasVerifier = 1;
 }
 
+def RcDecreaseOp : ReuseIR_Op<"rc.decrease"> {
+  let summary = "Decrease reference count";
+  let description = [{
+    This decrement operation is for progressively lowering rc.release operation. It decreases
+    the reference count and return a flag indicating whether the object should be dropped.
+  }];
+
+  let arguments = (ins Arg<ReuseIR_RcType, "target rc pointer", [MemReadAt<0>, MemWriteAt<1>]>:$rcPtr);
+  let results = (outs Res<I1, "drop flag">:$dropFlag);
+  let assemblyFormat = [{
+    `(` $rcPtr `:` type($rcPtr) `)` attr-dict `:`  type($dropFlag) 
+  }];
+
+  let hasVerifier = 1;
+}
+
+def RcReleaseOp : ReuseIR_Op<"rc.release"> {
+  let summary = "Release reference count and drop the object if necessary";
+  let description = [{
+    `reuse_ir.rc.release` decreases the reference count of the object.
+    - It target rc is a freezable one, it has no result. The operation translates to runtime function call.
+    - If the target rc is not freezable, it returns a nullable token.
+  }];
+
+  let arguments = (ins Arg<ReuseIR_RcType, "target rc pointer", [MemReadAt<0>, MemWriteAt<1>]>:$rcPtr);
+  let results = (outs Res<Optional<ReuseIR_NullableToken>, "token">:$token);
+  let assemblyFormat = [{
+    `(` $rcPtr `:` type($rcPtr) `)` attr-dict  (`:` type($token)^)?
+  }];
+
+  let hasVerifier = 1;
+}
+
 def ProjectableType : AnyTypeOf<[ReuseIR_RcType, ReuseIR_RefType, ReuseIR_CompositeType, ReuseIR_ArrayType]>;
 
 def ValueToRefOp : ReuseIR_Op<"val2ref"> {
@@ -186,10 +219,10 @@ def ValueToRefOp : ReuseIR_Op<"val2ref"> {
     let hasVerifier = 1;
 }
 
-def BorrowOp : ReuseIR_Op<"borrow"> {
+def RcBorrowOp : ReuseIR_Op<"rc.borrow"> {
     let summary = "Borrow the managed object and get the reference";
     let description = [{
-      `reuse_ir.borrow` is used to get the reference to the managed object.
+      `reuse_ir.rc.borrow` is used to get the reference to the managed object.
     }];
     let results = (outs ReuseIR_RefType:$result);
     let arguments = (
@@ -201,15 +234,19 @@ def BorrowOp : ReuseIR_Op<"borrow"> {
     let hasVerifier = 1;
 }
 
-// TODO:
-// def RefToValueOp : : ReuseIR_Op<"ref2val"> {
-//     let summary = "Promote a value to stack and get the reference";
-//     let description = [{
-//       `reuse_ir.val2ref` is used to promote a value to an alloca on stack.
-//       For arguments passed as values, this operation should be used at the
-//       beginning of the function to allow
-//     }];
-// }
+def RcTokenizeOp : ReuseIR_Op<"rc.tokenize"> {
+    let summary = "Convert the rc to a token that is suitable for its underlying RcBox";
+    let description = [{
+      `reuse_ir.rc.tokenize` converts the rc to a token that is suitable for its underlying RcBox.
+    }];
+    let results = (outs ReuseIR_TokenType:$token);
+    let arguments = (
+        ins ReuseIR_RcType:$object
+    );
+    let assemblyFormat = [{
+      $object attr-dict `:` type($object) `->` type($token)
+    }];
+}
 
 def ProjOp : ReuseIR_Op<"proj"> {
   let summary = "Project a field out of a value type or a referential type";
@@ -255,7 +292,7 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
     - For composite/union type (either a reference or the value), 
       this operation project out the fields that require additional 
       maintenance and apply the required operations.
-      - For RC type, it applies the `reuse_ir.dec` operation.
+      - For RC type, it applies the `reuse_ir.rc.release` operation.
       - For nested composite/union types, it recursively applies the 
         `reuse_ir.destroy` operation.
     - Specialized types such as Opaque/Vector/Closure are specially handled.
