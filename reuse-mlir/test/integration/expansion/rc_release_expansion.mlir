@@ -21,7 +21,7 @@ module @test attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<f80, dense<
 
 // CHECK-LOWERING: llvm.func @rc_release_expansion(%[[regarg0:[a-z0-9]+]]: !llvm.ptr) -> !llvm.ptr {
 // CHECK-LOWERING:     %[[reg0:[a-z0-9]+]] = llvm.mlir.constant(1 : i64) : i64
-// CHECK-LOWERING:     %[[reg1:[a-z0-9]+]] = llvm.getelementptr %[[regarg0]][0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(i64, i64)>
+// CHECK-LOWERING:     %[[reg1:[a-z0-9]+]] = llvm.getelementptr %[[regarg0]][0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(i64, i64)>
 // CHECK-LOWERING:     %[[reg2:[a-z0-9]+]] = llvm.load %[[reg1]] : !llvm.ptr -> i64
 // CHECK-LOWERING:     %[[reg3:[a-z0-9]+]] = llvm.sub %[[reg2]], %[[reg0]] : i64
 // CHECK-LOWERING:     llvm.store %[[reg3]], %[[reg1]] : i64, !llvm.ptr
