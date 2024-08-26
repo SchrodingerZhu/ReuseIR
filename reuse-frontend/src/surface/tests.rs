@@ -17,6 +17,9 @@ def f2 [
 ] (s: str) -> str :
 \"hello, world\"
 
+def f3() -> f64:
+    -114.514
+
 data
   Foo [T]:
     A

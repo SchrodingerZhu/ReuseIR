@@ -1,7 +1,7 @@
 use chumsky::error::Rich;
 use chumsky::extra::Err;
-use chumsky::prelude::{choice, just, none_of};
-use chumsky::text::{digits, ident, inline_whitespace, newline, whitespace};
+use chumsky::prelude::{choice, just, none_of, one_of};
+use chumsky::text::{digits, ident, inline_whitespace, int, newline, whitespace};
 use chumsky::{IterParser, Parser};
 
 use crate::concrete::{CtorExpr, CtorParamsExpr, Expr, File, ParamExpr};
@@ -25,7 +25,7 @@ macro_rules! out {
 
 macro_rules! primitive {
     ($kw:literal, $e:ident) => {
-        just($kw).map(|_| Box::new(Expr::$e))
+        just($kw).map(|_| Expr::$e)
     };
 }
 
@@ -159,7 +159,9 @@ impl Surface {
         primitive!("None", None)
             .or(primitive!("False", True))
             .or(primitive!("True", True))
-            .or(Self::str().map(Expr::Str).map(Box::new))
+            .or(Self::str().map(Expr::Str))
+            .or(Self::float().map(Expr::Float))
+            .map(Box::new)
     }
 
     fn type_expr<'src>() -> out!(Box<Expr<'src>>) {
@@ -168,6 +170,7 @@ impl Surface {
             .or(primitive!("None", NoneType))
             .or(primitive!("f32", F32))
             .or(primitive!("f64", F64))
+            .map(Box::new)
     }
 
     fn param<'src>(&mut self) -> out!(ParamExpr<'src>) {
@@ -254,5 +257,27 @@ impl Surface {
                 )),
             )))
             .ignored()
+    }
+
+    fn float<'src>() -> out!(f64) {
+        just('-')
+            .or_not()
+            .then(int(10))
+            .then(just('.').then(Self::decimals()).or_not())
+            .then(Self::exponential().or_not())
+            .to_slice()
+            .map(|s: &str| s.parse().unwrap())
+    }
+
+    fn decimals<'src>() -> out!(&'src str) {
+        digits(10).to_slice()
+    }
+
+    fn exponential<'src>() -> out!(&'src str) {
+        just('e')
+            .or(just('E'))
+            .then(one_of("+-").or_not())
+            .then(Self::decimals())
+            .to_slice()
     }
 }
