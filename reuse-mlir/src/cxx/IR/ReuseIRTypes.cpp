@@ -400,6 +400,13 @@ CompositeType::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
   return mlir::success();
 }
 
+mlir::LogicalResult CompositeType::verifyInvariants(
+    llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+    llvm::ArrayRef<mlir::Type> members, mlir::StringAttr name,
+    bool incomplete) {
+  return verify(emitError, members, name, incomplete);
+}
+
 CompositeType CompositeType::get(::mlir::MLIRContext *context,
                                  ArrayRef<Type> members, StringAttr name) {
   return Base::get(context, members, name, false);
@@ -408,8 +415,6 @@ CompositeType CompositeType::get(::mlir::MLIRContext *context,
 CompositeType CompositeType::getChecked(
     ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
     ::mlir::MLIRContext *context, ArrayRef<Type> members, StringAttr name) {
-  if (failed(verify(emitError, members, name, /*incomplete=*/false)))
-    return {};
   return Base::getChecked(emitError, context, members, name,
                           /*incomplete=*/false);
 }
@@ -423,9 +428,6 @@ CompositeType CompositeType::get(::mlir::MLIRContext *context,
 CompositeType CompositeType::getChecked(
     ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
     ::mlir::MLIRContext *context, StringAttr name) {
-  if (failed(verify(emitError, /*members=*/ArrayRef<Type>{}, name,
-                    /*incomplete=*/true)))
-    return {};
   return Base::getChecked(emitError, context, ArrayRef<Type>{}, name,
                           /*incomplete=*/true);
 }
@@ -438,8 +440,6 @@ CompositeType CompositeType::get(::mlir::MLIRContext *context,
 CompositeType CompositeType::getChecked(
     ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
     ::mlir::MLIRContext *context, ArrayRef<Type> members) {
-  if (failed(verify(emitError, members, StringAttr{}, /*incomplete=*/false)))
-    return {};
   return Base::getChecked(emitError, context, members, StringAttr{},
                           /*incomplete=*/false);
 }
