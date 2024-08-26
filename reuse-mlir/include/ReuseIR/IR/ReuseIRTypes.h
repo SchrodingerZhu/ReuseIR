@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
+#include <llvm-20/llvm/ADT/StringRef.h>
 #include <variant>
 
 #define GET_TYPEDEF_CLASSES
@@ -30,14 +31,24 @@ namespace reuse_ir {
 void populateLLVMTypeConverter(CompositeLayoutCache &cache,
                                mlir::LLVMTypeConverter &converter);
 
-#include "ReuseIRTypeDetails.h.inc"
+namespace detail {
+// forward declaration
+template <typename Impl> struct ContainerLikeTypeStorage;
+struct CompositeTypeImpl;
+struct UnionTypeImpl;
+} // namespace detail
 
-class CompositeType
-    : public Type::TypeBase<CompositeType, Type, detail::CompositeTypeStorage,
-                            DataLayoutTypeInterface::Trait,
-                            ReuseIRCompositeLayoutInterface::Trait,
-                            TypeTrait::IsMutable> {
+template <typename Impl>
+class ContainerLikeType
+    : public Type::TypeBase<
+          ContainerLikeType<Impl>, Type, detail::ContainerLikeTypeStorage<Impl>,
+          DataLayoutTypeInterface::Trait,
+          ReuseIRCompositeLayoutInterface::Trait, TypeTrait::IsMutable> {
 public:
+  using Base = Type::TypeBase<
+      ContainerLikeType<Impl>, Type, detail::ContainerLikeTypeStorage<Impl>,
+      DataLayoutTypeInterface::Trait, ReuseIRCompositeLayoutInterface::Trait,
+      TypeTrait::IsMutable>;
   using Base::Base;
   using Base::getChecked;
 
@@ -46,41 +57,36 @@ public:
 #else
   using Base::verifyInvariants;
 #endif
-
   // NOLINTNEXTLINE(readability-identifier-naming)
-  static constexpr llvm::StringLiteral name = "reuse_ir.composite";
+  static constexpr mlir::StringLiteral name = Impl::name;
+  static constexpr mlir::StringLiteral getMnemonic() {
+    return Impl::getMnemonic();
+  }
 
-  static CompositeType get(MLIRContext *context, ArrayRef<Type> members,
-                           StringAttr name);
-  static CompositeType getChecked(function_ref<InFlightDiagnostic()> emitError,
-                                  MLIRContext *context, ArrayRef<Type> members,
-                                  StringAttr name);
+  static ContainerLikeType get(MLIRContext *context, ArrayRef<Type> innerTypes,
+                               StringAttr name);
+  static ContainerLikeType
+  getChecked(function_ref<InFlightDiagnostic()> emitError, MLIRContext *context,
+             ArrayRef<Type> innerTypes, StringAttr name);
 
   /// Create a identified and incomplete struct type.
-  static CompositeType get(MLIRContext *context, StringAttr name);
-  static CompositeType getChecked(function_ref<InFlightDiagnostic()> emitError,
-                                  MLIRContext *context, StringAttr name);
+  static ContainerLikeType get(MLIRContext *context, StringAttr name);
+  static ContainerLikeType
+  getChecked(function_ref<InFlightDiagnostic()> emitError, MLIRContext *context,
+             StringAttr name);
 
   /// Create a anonymous struct type (always complete).
-  static CompositeType get(MLIRContext *context, ArrayRef<Type> members);
-  static CompositeType getChecked(function_ref<InFlightDiagnostic()> emitError,
-                                  MLIRContext *context, ArrayRef<Type> members);
-
-  /// Validate the struct about to be constructed.
-  static LogicalResult verify(function_ref<InFlightDiagnostic()> emitError,
-                              ArrayRef<Type> members, StringAttr name,
-                              bool incomplete);
-  static LogicalResult
-  verifyInvariants(function_ref<InFlightDiagnostic()> emitError,
-                   ArrayRef<Type> members, StringAttr name, bool incomplete);
+  static ContainerLikeType get(MLIRContext *context, ArrayRef<Type> innerTypes);
+  static ContainerLikeType
+  getChecked(function_ref<InFlightDiagnostic()> emitError, MLIRContext *context,
+             ArrayRef<Type> innerTypes);
 
   // Parse/print methods.
-  static constexpr mlir::StringLiteral getMnemonic() { return {"composite"}; }
   static Type parse(AsmParser &odsParser);
   void print(AsmPrinter &odsPrinter) const;
 
   // Accessors
-  ArrayRef<Type> getMembers() const;
+  ArrayRef<Type> getInnerTypes() const;
   StringAttr getName() const;
   bool getIncomplete() const;
 
@@ -89,22 +95,48 @@ public:
   bool isIncomplete() const;
 
   // Utilities
-  size_t getNumElements() const { return getMembers().size(); };
+  size_t getNumElements() const { return getInnerTypes().size(); };
 
-  /// Complete the struct type by mutating its members and attributes.
-  void complete(ArrayRef<Type> members);
+  /// Complete the struct type by mutating its innerTypes and attributes.
+  void complete(ArrayRef<Type> innerTypes);
 
   /// DataLayoutTypeInterface methods.
   ::llvm::TypeSize getTypeSizeInBits(const DataLayout &dataLayout,
-                                     DataLayoutEntryListRef params) const;
+                                     DataLayoutEntryListRef params) const {
+    return getCompositeLayout(dataLayout).getSize() * 8;
+  }
   uint64_t getABIAlignment(const DataLayout &dataLayout,
-                           DataLayoutEntryListRef params) const;
+                           DataLayoutEntryListRef params) const {
+    return getCompositeLayout(dataLayout).getAlignment().value();
+  }
   uint64_t getPreferredAlignment(const DataLayout &dataLayout,
-                                 DataLayoutEntryListRef params) const;
+                                 DataLayoutEntryListRef params) const {
+    return getCompositeLayout(dataLayout).getAlignment().value();
+  }
   // CompositeLayoutInterface methods.
   ::mlir::reuse_ir::CompositeLayout
-  getCompositeLayout(::mlir::DataLayout layout) const;
+  getCompositeLayout(::mlir::DataLayout layout) const {
+    return Impl::getCompositeLayout(Base::getContext(), layout,
+                                    getInnerTypes());
+  }
+
+  /// Validate the struct about to be constructed.
+  static LogicalResult verify(function_ref<InFlightDiagnostic()> emitError,
+                              ArrayRef<Type> members, StringAttr name,
+                              bool incomplete) {
+    return Impl::verify(emitError, members, name, incomplete);
+  }
+  static LogicalResult
+  verifyInvariants(function_ref<InFlightDiagnostic()> emitError,
+                   ArrayRef<Type> members, StringAttr name, bool incomplete) {
+    return verify(emitError, members, name, incomplete);
+  }
 };
+
+using CompositeType = ContainerLikeType<detail::CompositeTypeImpl>;
+using UnionType = ContainerLikeType<detail::UnionTypeImpl>;
+#include "ReuseIRTypeDetails.h.inc"
+
 } // namespace reuse_ir
 } // namespace mlir
 

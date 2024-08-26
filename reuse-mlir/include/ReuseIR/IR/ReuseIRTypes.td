@@ -254,46 +254,11 @@ def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
 }
 
 
-def ReuseIR_CompositeType : Type<CPred<"::mlir::isa<::mlir::cir::CompositeType>($_self)">,
+def ReuseIR_CompositeType : Type<CPred<"::mlir::isa<::mlir::reuse_ir::CompositeType>($_self)">,
                           "ReuseIR composite type">;
 
-def ReuseIR_UnionType : ReuseIR_Type<"Union", "union",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
-  let summary = "ReuseIR Union Type";
-  let description = [{
-    `reuse_ir.union` is a tagged union of other types
-    struct {
-      <...> tag;
-      union {
-        Types...;
-      };
-    }
-  }];
-
-  let parameters = (ins
-    ArrayRefParameter<"::mlir::Type">:$memberTypes
-  );
-
-  let assemblyFormat = [{
-    `<` $memberTypes `>`
-  }];
-
-  let extraClassDeclaration = [{
-  ::mlir::IntegerType getTagType() const {
-    return ::mlir::IntegerType::get(getContext(), ::llvm::Log2_64(::llvm::PowerOf2Ceil(getMemberTypes().size())));
-  }
-  std::pair<::llvm::TypeSize, ::llvm::Align> getDataLayout(::mlir::DataLayout layout) const {
-    ::llvm::TypeSize size = ::llvm::TypeSize::getFixed(0);
-    ::llvm::Align alignment {1};
-    for (auto type : getMemberTypes()) {
-        size = std::max(size, ::llvm::TypeSize::getFixed(layout.getTypeSize(type)));
-        alignment = std::max(alignment, ::llvm::Align(layout.getTypeABIAlignment(type)));
-    }
-    size = ::llvm::alignTo(size, alignment.value());
-    return {size, alignment};
-  }
-  }];
-}
+def ReuseIR_UnionType : Type<CPred<"::mlir::isa<::mlir::reuse_ir::UnionType>($_self)">,
+                          "ReuseIR union  type">;
 
 def ReuseIR_ClosureType : ReuseIR_Type<"Closure", "closure",
     [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
