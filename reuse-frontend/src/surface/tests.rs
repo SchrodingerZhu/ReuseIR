@@ -7,12 +7,27 @@ use crate::surface::Surface;
 fn it_parses_file() {
     const SRC: &str = "
 
-def f0 () -> None : None
-def f1 () -> None : None
+def f0 (  ) -> None : None
+def f1 (
+) -> None : None
 
-def f2 [T] (s: str) -> None :
-None
+def f2 [
+    T,
+    U,
+] (s: str) -> str :
+\"hello, world\"
 
+def f3() -> f64:
+    -114.514
+
+data
+  Foo [T]:
+    A
+B(str)
+    C(
+        s  : str  ,
+        b: bool  ,
+    )
 
 ";
     Surface::default()
