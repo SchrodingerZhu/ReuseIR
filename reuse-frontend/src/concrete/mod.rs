@@ -1,3 +1,5 @@
+mod scope;
+
 use crate::name::Ident;
 use crate::syntax::{Ctor, CtorParams, Decl, Param, Syntax};
 

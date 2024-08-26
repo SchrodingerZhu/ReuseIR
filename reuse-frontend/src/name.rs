@@ -4,14 +4,8 @@ pub type ID = u64;
 
 #[derive(Debug, Clone)]
 pub struct Ident<'src> {
-    id: ID,
-    raw: &'src str,
-}
-
-impl<'src> Ident<'src> {
-    pub fn new(id: ID, raw: &'src str) -> Self {
-        Self { id, raw }
-    }
+    pub id: ID,
+    pub raw: &'src str,
 }
 
 impl<'src> Display for Ident<'src> {

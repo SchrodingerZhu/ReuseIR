@@ -325,6 +325,6 @@ impl Surface {
 
     fn ident<'src>(&mut self) -> out!(Ident<'src>) {
         let id = self.ids.fresh();
-        ident().map(move |s| Ident::new(id, s))
+        ident().map(move |raw| Ident { raw, id })
     }
 }
