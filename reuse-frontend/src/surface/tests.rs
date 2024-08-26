@@ -14,8 +14,8 @@ def f1 (
 def f2 [
     T,
     U,
-] (s: str) -> None :
-None
+] (s: str) -> str :
+\"hello, world\"
 
 data
   Foo [T]:
