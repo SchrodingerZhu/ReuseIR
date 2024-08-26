@@ -289,17 +289,16 @@ struct UnionTypeImpl {
          ArrayRef<Type> innerTypes, mlir::StringAttr name, bool incomplete) {
     for (auto type : innerTypes) {
       if (llvm::isa<RefType>(type))
-        return emitError()
-               << "cannot have a reference type in a composite type";
+        return emitError() << "cannot have a reference type in a union type";
       if (auto rcTy = llvm::dyn_cast<RcType>(type)) {
         if (rcTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
           return emitError()
                  << "cannot have a non-frozen but freezable RC type "
-                    "in a composite type, use mref instead";
+                    "in a union type, use mref instead";
       }
     }
     if (name && name.getValue().empty()) {
-      emitError() << "an identified composite type cannot have an empty name";
+      emitError() << "an identified union type cannot have an empty name";
       return mlir::failure();
     }
     return mlir::success();
