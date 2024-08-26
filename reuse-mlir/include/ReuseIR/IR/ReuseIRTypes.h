@@ -20,7 +20,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
-#include <llvm-20/llvm/ADT/StringRef.h>
 #include <variant>
 
 #define GET_TYPEDEF_CLASSES
