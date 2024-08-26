@@ -16,7 +16,7 @@ pub struct File<'src> {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr<'src> {
     Ident(Ident<'src>),
 
@@ -35,6 +35,16 @@ pub enum Expr<'src> {
     F32,
     F64,
     Float(f64),
+
+    FnType {
+        param_types: Box<[Box<Expr<'src>>]>,
+        eff: Box<Expr<'src>>,
+        ret: Box<Expr<'src>>,
+    },
+    Fn {
+        params: Box<[Ident<'src>]>,
+        body: Box<Expr<'src>>,
+    },
 
     Pure,
 }

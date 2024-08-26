@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 pub type ID = u64;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ident<'src> {
     id: ID,
     raw: &'src str,

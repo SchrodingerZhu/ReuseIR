@@ -17,8 +17,13 @@ def f2 [
 ] (s: str) -> str :
 \"hello, world\"
 
-def f3() -> f64:
-    -114.514
+def f3() -> f64: -114.514
+
+def f4() -> [] -> bool:
+    lambda
+        :
+            True
+def f5() -> [bool, str] -> bool: lambda a, b: False
 
 data
   Foo [T]:

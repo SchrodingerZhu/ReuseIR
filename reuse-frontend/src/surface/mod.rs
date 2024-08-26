@@ -1,6 +1,7 @@
 use chumsky::error::Rich;
 use chumsky::extra::Err;
 use chumsky::prelude::{choice, just, none_of, one_of};
+use chumsky::recursive::recursive;
 use chumsky::text::{digits, ident, inline_whitespace, int, newline, whitespace};
 use chumsky::{IterParser, Parser};
 
@@ -63,7 +64,7 @@ impl Surface {
             )
             .then_ignore(just(':'))
             .padded()
-            .then(Self::expr())
+            .then(self.expr())
             .padded_by(inline_whitespace())
             .then_ignore(newline())
             .map(|((((name, typ_params), val_params), ret), body)| Decl {
@@ -155,22 +156,125 @@ impl Surface {
             .then_ignore(just(')'))
     }
 
-    fn expr<'src>() -> out!(Box<Expr<'src>>) {
-        primitive!("None", None)
-            .or(primitive!("False", True))
-            .or(primitive!("True", True))
-            .or(Self::str().map(Expr::Str))
-            .or(Self::float().map(Expr::Float))
-            .map(Box::new)
+    fn expr<'src>(&mut self) -> out!(Box<Expr<'src>>) {
+        recursive(|expr| {
+            let lambda = just("lambda")
+                .ignore_then(whitespace())
+                .ignore_then(
+                    self.ident()
+                        .padded()
+                        .separated_by(just(','))
+                        .collect::<Vec<_>>()
+                        .map(Vec::into_boxed_slice),
+                )
+                .then_ignore(whitespace())
+                .then_ignore(just(':'))
+                .then_ignore(whitespace())
+                .then(expr)
+                .map(|(params, body)| Expr::Fn { params, body });
+
+            lambda
+                .or(primitive!("None", None))
+                .or(primitive!("False", True))
+                .or(primitive!("True", True))
+                .or(Self::str().map(Expr::Str))
+                .or(Self::float().map(Expr::Float))
+                .map(Box::new)
+                .boxed()
+        })
+    }
+
+    fn str<'src>() -> out!(&'src str) {
+        none_of("\\\"")
+            .ignored()
+            .or(Self::escaped())
+            .repeated()
+            .to_slice()
+            .delimited_by(just('"'), just('"'))
+    }
+
+    fn escaped<'src>() -> out!(()) {
+        const INVALID_CHAR: char = '\u{FFFD}';
+        just('\\')
+            .then(choice((
+                just('\\'),
+                just('/'),
+                just('"'),
+                just('b').to('\x08'),
+                just('f').to('\x0C'),
+                just('n').to('\n'),
+                just('r').to('\r'),
+                just('t').to('\t'),
+                just('u').ignore_then(digits(16).exactly(4).to_slice().validate(
+                    |digits, e, emitter| {
+                        char::from_u32(u32::from_str_radix(digits, 16).unwrap()).unwrap_or_else(
+                            || {
+                                emitter.emit(Rich::custom(e.span(), "invalid unicode character"));
+                                INVALID_CHAR
+                            },
+                        )
+                    },
+                )),
+            )))
+            .ignored()
+    }
+
+    fn float<'src>() -> out!(f64) {
+        just('-')
+            .or_not()
+            .then(int(10))
+            .then(just('.').then(Self::decimal()).or_not())
+            .then(Self::exponential().or_not())
+            .to_slice()
+            .map(|s: &str| s.parse().unwrap())
+    }
+
+    fn decimal<'src>() -> out!(&'src str) {
+        digits(10).to_slice()
+    }
+
+    fn exponential<'src>() -> out!(&'src str) {
+        just('e')
+            .or(just('E'))
+            .then(one_of("+-").or_not())
+            .then(Self::decimal())
+            .to_slice()
     }
 
     fn type_expr<'src>() -> out!(Box<Expr<'src>>) {
-        primitive!("bool", Boolean)
-            .or(primitive!("str", String))
-            .or(primitive!("None", NoneType))
-            .or(primitive!("f32", F32))
-            .or(primitive!("f64", F64))
-            .map(Box::new)
+        recursive(|expr| {
+            let fn_type = just('[')
+                .ignore_then(whitespace())
+                .ignore_then(
+                    expr.clone()
+                        .padded()
+                        .separated_by(just(','))
+                        .collect::<Vec<_>>()
+                        .map(Vec::into_boxed_slice),
+                )
+                .then_ignore(whitespace())
+                .then_ignore(just(']'))
+                .then_ignore(whitespace())
+                .then_ignore(just("->"))
+                .then_ignore(whitespace())
+                .then(expr)
+                .map(|(param_types, ret)| {
+                    Expr::FnType {
+                        param_types,
+                        eff: Box::new(Expr::Pure), // TODO: parse effects
+                        ret,
+                    }
+                });
+
+            fn_type
+                .or(primitive!("bool", Boolean))
+                .or(primitive!("str", String))
+                .or(primitive!("None", NoneType))
+                .or(primitive!("f32", F32))
+                .or(primitive!("f64", F64))
+                .map(Box::new)
+                .boxed()
+        })
     }
 
     fn param<'src>(&mut self) -> out!(ParamExpr<'src>) {
@@ -222,62 +326,5 @@ impl Surface {
     fn ident<'src>(&mut self) -> out!(Ident<'src>) {
         let id = self.ids.fresh();
         ident().map(move |s| Ident::new(id, s))
-    }
-
-    fn str<'src>() -> out!(&'src str) {
-        none_of("\\\"")
-            .ignored()
-            .or(Self::escaped())
-            .repeated()
-            .to_slice()
-            .delimited_by(just('"'), just('"'))
-    }
-
-    fn escaped<'src>() -> out!(()) {
-        const INVALID_CHAR: char = '\u{FFFD}';
-        just('\\')
-            .then(choice((
-                just('\\'),
-                just('/'),
-                just('"'),
-                just('b').to('\x08'),
-                just('f').to('\x0C'),
-                just('n').to('\n'),
-                just('r').to('\r'),
-                just('t').to('\t'),
-                just('u').ignore_then(digits(16).exactly(4).to_slice().validate(
-                    |digits, e, emitter| {
-                        char::from_u32(u32::from_str_radix(digits, 16).unwrap()).unwrap_or_else(
-                            || {
-                                emitter.emit(Rich::custom(e.span(), "invalid unicode character"));
-                                INVALID_CHAR
-                            },
-                        )
-                    },
-                )),
-            )))
-            .ignored()
-    }
-
-    fn float<'src>() -> out!(f64) {
-        just('-')
-            .or_not()
-            .then(int(10))
-            .then(just('.').then(Self::decimals()).or_not())
-            .then(Self::exponential().or_not())
-            .to_slice()
-            .map(|s: &str| s.parse().unwrap())
-    }
-
-    fn decimals<'src>() -> out!(&'src str) {
-        digits(10).to_slice()
-    }
-
-    fn exponential<'src>() -> out!(&'src str) {
-        just('e')
-            .or(just('E'))
-            .then(one_of("+-").or_not())
-            .then(Self::decimals())
-            .to_slice()
     }
 }
