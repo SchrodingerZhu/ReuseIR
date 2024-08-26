@@ -5,7 +5,7 @@ use chumsky::recursive::recursive;
 use chumsky::text::{digits, ident, inline_whitespace, int, newline, whitespace};
 use chumsky::{IterParser, Parser};
 
-use crate::concrete::{CtorExpr, CtorParamsExpr, Expr, File, ParamExpr};
+use crate::concrete::{CtorExpr, CtorParamsExpr, Expr, FileExpr, ParamExpr};
 use crate::name::{IDs, Ident};
 use crate::syntax::{DataDef, Decl, Def, FnDef, Param};
 
@@ -32,12 +32,12 @@ macro_rules! primitive {
 
 #[allow(dead_code)]
 impl Surface {
-    fn file<'src>(&mut self) -> out!(File<'src>) {
+    fn file<'src>(&mut self) -> out!(FileExpr<'src>) {
         self.decl()
             .padded()
             .repeated()
             .collect::<Vec<_>>()
-            .map(|decls| File {
+            .map(|decls| FileExpr {
                 decls: decls.into_boxed_slice(),
             })
     }

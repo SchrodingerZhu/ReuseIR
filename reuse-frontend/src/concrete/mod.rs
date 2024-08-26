@@ -1,21 +1,18 @@
 mod scope;
 
 use crate::name::Ident;
-use crate::syntax::{Ctor, CtorParams, Decl, Param, Syntax};
+use crate::syntax::{Ctor, CtorParams, Decl, File, Param, Syntax};
 
 #[allow(dead_code)]
+pub type FileExpr<'src> = File<'src, Expr<'src>>;
+#[allow(dead_code)]
+pub type DeclExpr<'src> = Decl<'src, Expr<'src>>;
+#[allow(dead_code)]
 pub type ParamExpr<'src> = Param<'src, Expr<'src>>;
-
 #[allow(dead_code)]
 pub type CtorExpr<'src> = Ctor<'src, Expr<'src>>;
 #[allow(dead_code)]
 pub type CtorParamsExpr<'src> = CtorParams<'src, Expr<'src>>;
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct File<'src> {
-    pub decls: Box<[Decl<'src, Expr<'src>>]>,
-}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]

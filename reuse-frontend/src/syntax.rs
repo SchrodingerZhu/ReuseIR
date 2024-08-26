@@ -11,6 +11,12 @@ pub struct Param<'src, T: Syntax> {
 
 #[allow(dead_code)]
 #[derive(Debug)]
+pub struct File<'src, T: Syntax> {
+    pub decls: Box<[Decl<'src, T>]>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
 pub struct Decl<'src, T: Syntax> {
     pub name: Ident<'src>,
     pub def: Def<'src, T>,

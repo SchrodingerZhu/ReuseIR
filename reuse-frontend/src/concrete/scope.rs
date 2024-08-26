@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::concrete::Expr;
+use crate::concrete::{DeclExpr, Expr, FileExpr};
 use crate::name::{Ident, ID};
 
 #[allow(dead_code)]
@@ -18,19 +18,31 @@ struct ScopeChecker<'src> {
 
 impl<'src> ScopeChecker<'src> {
     #[allow(dead_code)]
-    fn expr(&mut self, _expr: Expr<'src>) -> Result<(), Error<'src>> {
+    pub fn file(&mut self, file: &mut FileExpr<'src>) -> Result<(), Error<'src>> {
+        file.decls
+            .iter_mut()
+            .try_fold((), |_, decl| self.decl(decl))
+    }
+
+    #[allow(dead_code)]
+    fn decl(&mut self, _decl: &mut DeclExpr<'src>) -> Result<(), Error<'src>> {
+        todo!()
+    }
+
+    #[allow(dead_code)]
+    fn expr(&mut self, _expr: &mut Expr<'src>) -> Result<(), Error<'src>> {
         todo!()
     }
 
     #[allow(dead_code)]
     fn guarded<const N: usize>(
         &mut self,
-        idents: [Ident<'src>; N],
-        expr: Expr<'src>,
+        idents: [&Ident<'src>; N],
+        expr: &mut Expr<'src>,
     ) -> Result<(), Error<'src>> {
         let olds = idents
             .into_iter()
-            .filter_map(|Ident { raw, id }| self.locals.insert(raw, id).map(|old| (raw, old)))
+            .filter_map(|&Ident { raw, id }| self.locals.insert(raw, id).map(|old| (raw, old)))
             .collect::<Vec<_>>();
 
         self.expr(expr)?;
