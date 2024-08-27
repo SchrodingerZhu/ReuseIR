@@ -3,6 +3,7 @@
 #include "ReuseIR/IR/ReuseIRDialect.h"
 
 #include "ReuseIR/IR/ReuseIROpsEnums.h"
+#include "ReuseIR/Interfaces/ReuseIRCompositeLayoutInterface.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
@@ -194,44 +195,6 @@ uint64_t ClosureType::getPreferredAlignment(
   return getCompositeLayout(dataLayout).getAlignment().value();
 }
 
-// Union DataLayoutInterface:
-::llvm::TypeSize UnionType::getTypeSizeInBits(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getSize() * 8;
-}
-
-uint64_t UnionType::getABIAlignment(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getAlignment().value();
-}
-
-uint64_t
-UnionType::getPreferredAlignment(const ::mlir::DataLayout &dataLayout,
-                                 ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getAlignment().value();
-}
-
-// Composite DataLayoutInterface:
-::llvm::TypeSize CompositeType::getTypeSizeInBits(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getSize() * 8;
-}
-
-uint64_t CompositeType::getABIAlignment(
-    const ::mlir::DataLayout &dataLayout,
-    [[maybe_unused]] ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getAlignment().value();
-}
-
-uint64_t CompositeType::getPreferredAlignment(
-    const ::mlir::DataLayout &dataLayout,
-    ::mlir::DataLayoutEntryListRef params) const {
-  return getCompositeLayout(dataLayout).getAlignment().value();
-}
-
 // Token Verifier:
 ::mlir::reuse_ir::LogicalResult
 TokenType::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
@@ -250,35 +213,57 @@ void TokenType::formatMangledNameTo(::llvm::raw_string_ostream &buffer) const {
   buffer << "5TokenILm" << getSize() << "Elm" << getAlignment() << "EE";
 }
 
-::mlir::reuse_ir::LogicalResult CompositeType::verify(
-    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
-    ::llvm::ArrayRef<mlir::Type> memberTypes) {
-  for (auto type : memberTypes) {
-    if (llvm::isa<RefType>(type))
-      return emitError() << "cannot have a reference type in a composite type";
-    if (auto rcTy = llvm::dyn_cast<RcType>(type)) {
-      if (rcTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
-        return emitError() << "cannot have a non-frozen but freezable RC type "
-                              "in a composite type, use mref instead";
-    }
-  }
-  return ::mlir::reuse_ir::success();
-}
-
 void ReuseIRDialect::registerTypes() {
   (void)generatedTypePrinter;
   (void)generatedTypeParser;
   // Register tablegen'd types.
-  addTypes<
+  addTypes<CompositeType,
 #define GET_TYPEDEF_LIST
 #include "ReuseIR/IR/ReuseIROpsTypes.cpp.inc"
-      >();
+           >();
 }
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 
 namespace mlir {
 namespace reuse_ir {
+
+Type ReuseIRDialect::parseType(DialectAsmParser &parser) const {
+  llvm::SMLoc typeLoc = parser.getCurrentLocation();
+  StringRef mnemonic;
+  Type genType;
+
+  // Try to parse as a tablegen'd type.
+  OptionalParseResult parseResult =
+      generatedTypeParser(parser, &mnemonic, genType);
+  if (parseResult.has_value())
+    return genType;
+
+  // Type is not tablegen'd: try to parse as a raw C++ type.
+  return StringSwitch<function_ref<Type()>>(mnemonic)
+      .Case("composite", [&] { return CompositeType::parse(parser); })
+      .Default([&] {
+        parser.emitError(typeLoc) << "unknown reuse_ir type: " << mnemonic;
+        return Type();
+      })();
+}
+
+void ReuseIRDialect::printType(Type type, DialectAsmPrinter &os) const {
+  // Try to print as a tablegen'd type.
+  if (generatedTypePrinter(type, os).succeeded())
+    return;
+
+  // Type is not tablegen'd: try printing as a raw C++ type.
+  TypeSwitch<Type>(type)
+      .Case<CompositeType>([&](CompositeType type) {
+        os << type.getMnemonic();
+        type.print(os);
+      })
+      .Default([](Type) {
+        llvm::report_fatal_error("printer is missing a handler for this type");
+      });
+}
+
 // ReuseIRCompositeLayoutInterface
 ::mlir::reuse_ir::CompositeLayout
 RcBoxType::getCompositeLayout(::mlir::DataLayout layout) const {
@@ -304,21 +289,6 @@ OpaqueType::getCompositeLayout(::mlir::DataLayout layout) const {
       ::mlir::IntegerType::get(getContext(), 8), align);
   auto dataArea = ::mlir::LLVM::LLVMArrayType::get(dataTy, size / align);
   return {layout, {ptrTy, ptrTy, dataArea}};
-}
-::mlir::reuse_ir::CompositeLayout
-UnionType::getCompositeLayout(::mlir::DataLayout layout) const {
-  auto tagType = getTagType();
-  auto [dataSz, dataAlign] = getDataLayout(layout);
-  auto cnt = dataSz.getFixedValue() / dataAlign.value();
-  auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
-      mlir::IntegerType::get(getContext(), 8), dataAlign.value());
-  auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
-  return {layout, {tagType, dataArea}};
-}
-
-::mlir::reuse_ir::CompositeLayout
-CompositeType::getCompositeLayout(::mlir::DataLayout layout) const {
-  return {layout, getMemberTypes()};
 }
 
 ::mlir::reuse_ir::CompositeLayout
@@ -361,5 +331,83 @@ void populateLLVMTypeConverter(CompositeLayoutCache &cache,
   });
 }
 
+namespace detail {
+CompositeLayout UnionTypeImpl::getCompositeLayout(mlir::MLIRContext *ctx,
+                                                  ::mlir::DataLayout layout,
+                                                  ArrayRef<Type> innerTypes) {
+  auto tagType = getTagType(ctx, innerTypes);
+  auto [dataSz, dataAlign] = getDataLayout(layout, innerTypes);
+  auto cnt = dataSz.getFixedValue() / dataAlign.value();
+  auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
+      mlir::IntegerType::get(ctx, 8), dataAlign.value());
+  auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
+  return {layout, {tagType, dataArea}};
+}
+LogicalResult
+UnionTypeImpl::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+                      ArrayRef<Type> innerTypes, mlir::StringAttr name,
+                      bool incomplete) {
+  for (auto type : innerTypes) {
+    if (llvm::isa<RefType>(type))
+      return emitError() << "cannot have a reference type in a union type";
+    if (auto rcTy = llvm::dyn_cast<RcType>(type)) {
+      if (rcTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
+        return emitError() << "cannot have a non-frozen but freezable RC type "
+                              "in a union type, use mref instead";
+    }
+  }
+  if (name && name.getValue().empty()) {
+    emitError() << "an identified union type cannot have an empty name";
+    return mlir::failure();
+  }
+  return mlir::success();
+}
+IntegerType UnionTypeImpl::getTagType(mlir::MLIRContext *ctx,
+                                      ArrayRef<Type> innerTypes) {
+  return ::mlir::IntegerType::get(
+      ctx, ::llvm::Log2_64(::llvm::PowerOf2Ceil(innerTypes.size())));
+}
+std::pair<::llvm::TypeSize, ::llvm::Align>
+UnionTypeImpl::getDataLayout(::mlir::DataLayout layout,
+                             ArrayRef<Type> innerTypes) {
+  ::llvm::TypeSize size = ::llvm::TypeSize::getFixed(0);
+  ::llvm::Align alignment{1};
+  for (auto type : innerTypes) {
+    size = std::max(size, ::llvm::TypeSize::getFixed(layout.getTypeSize(type)));
+    alignment =
+        std::max(alignment, ::llvm::Align(layout.getTypeABIAlignment(type)));
+  }
+  size = ::llvm::alignTo(size, alignment.value());
+  return {size, alignment};
+}
+CompositeLayout
+CompositeTypeImpl::getCompositeLayout(mlir::MLIRContext *ctx,
+                                      ::mlir::DataLayout layout,
+                                      ArrayRef<Type> innerTypes) {
+  return {layout, innerTypes};
+}
+LogicalResult CompositeTypeImpl::verify(
+    llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+    ArrayRef<Type> innerTypes, mlir::StringAttr name, bool incomplete) {
+  for (auto type : innerTypes) {
+    if (llvm::isa<RefType>(type))
+      return emitError() << "cannot have a reference type in a composite type";
+    if (auto rcTy = llvm::dyn_cast<RcType>(type)) {
+      if (rcTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
+        return emitError() << "cannot have a non-frozen but freezable RC type "
+                              "in a composite type, use mref instead";
+    }
+  }
+  if (name && name.getValue().empty()) {
+    emitError() << "an identified composite type cannot have an empty name";
+    return mlir::failure();
+  }
+  return mlir::success();
+}
+template struct ContainerLikeTypeStorage<detail::CompositeTypeImpl>;
+template struct ContainerLikeTypeStorage<detail::UnionTypeImpl>;
+} // namespace detail
+template class ContainerLikeType<detail::CompositeTypeImpl>;
+template class ContainerLikeType<detail::UnionTypeImpl>;
 } // namespace reuse_ir
 } // namespace mlir
