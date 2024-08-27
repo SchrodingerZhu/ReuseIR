@@ -1,14 +1,15 @@
-use std::fmt::{Display, Formatter};
-
 pub mod concrete;
 pub mod surface;
+
+use std::fmt::{Display, Formatter};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub type ID = u64;
 
 #[derive(Debug, Clone)]
 pub struct Ident<'src> {
-    pub id: ID,
     pub raw: &'src str,
+    pub id: ID,
 }
 
 impl<'src> Display for Ident<'src> {
@@ -17,14 +18,9 @@ impl<'src> Display for Ident<'src> {
     }
 }
 
-#[derive(Default)]
-pub struct IDs(ID);
-
-impl IDs {
-    pub fn fresh(&mut self) -> ID {
-        self.0 += 1;
-        self.0
-    }
+pub fn fresh() -> ID {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
 }
 
 pub trait Syntax {}

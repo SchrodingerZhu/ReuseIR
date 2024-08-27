@@ -4,6 +4,7 @@ use crate::syntax::concrete::{DeclExpr, Expr, FileExpr, ParamExpr};
 use crate::syntax::{CtorParams, DataDef, Def, FnDef, Ident, ID};
 
 #[allow(dead_code)]
+#[derive(Debug)]
 enum Error<'src> {
     DuplicateName(&'src str),
     UnresolvedIdent(&'src str),
@@ -20,7 +21,12 @@ struct ScopeChecker<'src> {
 
 impl<'src> ScopeChecker<'src> {
     #[allow(dead_code)]
-    pub fn file(&mut self, file: &mut FileExpr<'src>) -> Result<(), Error<'src>> {
+    pub fn check(file: &mut FileExpr<'src>) {
+        Self::default().file(file).unwrap();
+    }
+
+    #[allow(dead_code)]
+    fn file(&mut self, file: &mut FileExpr<'src>) -> Result<(), Error<'src>> {
         file.decls
             .iter()
             .try_fold((), |_, decl| self.insert_global(&decl.name))?;
@@ -145,5 +151,25 @@ impl<'src> ScopeChecker<'src> {
     #[allow(dead_code)]
     fn clear_locals(&mut self) {
         self.locals.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::syntax::concrete::scope::ScopeChecker;
+    use crate::syntax::surface::parse;
+
+    fn check(src: &str) {
+        ScopeChecker::check(&mut parse(src));
+    }
+
+    #[test]
+    fn it_checks_scope() {
+        check(
+            "
+def f0(): None
+def f1(): f0
+        ",
+        );
     }
 }
