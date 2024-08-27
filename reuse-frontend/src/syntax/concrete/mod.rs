@@ -1,7 +1,6 @@
 mod scope;
 
-use crate::name::Ident;
-use crate::syntax::{Ctor, CtorParams, Decl, File, Param, Syntax};
+use crate::syntax::{Ctor, CtorParams, Decl, File, Ident, Param, Syntax};
 
 #[allow(dead_code)]
 pub type FileExpr<'src> = File<'src, Expr<'src>>;

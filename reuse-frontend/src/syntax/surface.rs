@@ -5,12 +5,8 @@ use chumsky::recursive::recursive;
 use chumsky::text::{digits, ident, inline_whitespace, int, newline, whitespace};
 use chumsky::{IterParser, Parser};
 
-use crate::concrete::{CtorExpr, CtorParamsExpr, Expr, FileExpr, ParamExpr};
-use crate::name::{IDs, Ident};
-use crate::syntax::{DataDef, Decl, Def, FnDef, Param};
-
-#[cfg(test)]
-mod tests;
+use crate::syntax::concrete::{CtorExpr, CtorParamsExpr, Expr, FileExpr, ParamExpr};
+use crate::syntax::{DataDef, Decl, Def, FnDef, IDs, Ident, Param};
 
 #[allow(dead_code)]
 #[derive(Default)]
@@ -18,10 +14,10 @@ struct Surface {
     ids: IDs,
 }
 
-pub type ErrMsg<'src> = Rich<'src, char>;
+pub type Msg<'src> = Rich<'src, char>;
 
 macro_rules! out {
-    ($o:ty) => { impl Parser<'src, &'src str, $o, Err<ErrMsg<'src>>> };
+    ($o:ty) => { impl Parser<'src, &'src str, $o, Err<Msg<'src>>> };
 }
 
 macro_rules! primitive {
@@ -326,5 +322,53 @@ impl Surface {
     fn ident<'src>(&mut self) -> out!(Ident<'src>) {
         let id = self.ids.fresh();
         ident().map(move |raw| Ident { raw, id })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chumsky::Parser;
+
+    use crate::print_parse_errors;
+    use crate::syntax::surface::Surface;
+
+    #[test]
+    fn it_parses_file() {
+        const SRC: &str = "
+
+def f0 (  ) -> None : None
+def f1 (
+) -> None : None
+
+def f2 [
+    T,
+    U,
+] (s: str) -> str :
+\"hello, world\"
+
+def f3() -> f64: -114.514
+
+def f4() -> [] -> bool:
+    lambda
+        :
+            True
+def f5() -> [bool, str] -> bool: lambda a, b: False
+
+data
+  Foo [T]:
+    A
+B(str)
+    C(
+        s  : str  ,
+        b: bool  ,
+    )
+
+";
+        Surface::default()
+            .file()
+            .parse(SRC)
+            .into_result()
+            .inspect_err(|es| print_parse_errors(es, SRC))
+            .unwrap();
     }
 }
