@@ -246,80 +246,30 @@ struct CompositeTypeImpl {
   static constexpr llvm::StringLiteral getMnemonic() { return "composite"; }
   static ::mlir::reuse_ir::CompositeLayout
   getCompositeLayout(mlir::MLIRContext *, ::mlir::DataLayout layout,
-                     ArrayRef<Type> innerTypes) {
-    return {layout, innerTypes};
-  }
+                     ArrayRef<Type> innerTypes);
   static ::mlir::LogicalResult
   verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
-         ArrayRef<Type> innerTypes, mlir::StringAttr name, bool incomplete) {
-    for (auto type : innerTypes) {
-      if (llvm::isa<RefType>(type))
-        return emitError()
-               << "cannot have a reference type in a composite type";
-      if (auto rcTy = llvm::dyn_cast<RcType>(type)) {
-        if (rcTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
-          return emitError()
-                 << "cannot have a non-frozen but freezable RC type "
-                    "in a composite type, use mref instead";
-      }
-    }
-    if (name && name.getValue().empty()) {
-      emitError() << "an identified composite type cannot have an empty name";
-      return mlir::failure();
-    }
-    return mlir::success();
-  }
+         ArrayRef<Type> innerTypes, mlir::StringAttr name, bool incomplete);
 };
 struct UnionTypeImpl {
   static constexpr llvm::StringLiteral name = "reuse_ir.union";
   static constexpr llvm::StringLiteral getMnemonic() { return "union"; }
   static ::mlir::reuse_ir::CompositeLayout
   getCompositeLayout(mlir::MLIRContext *ctx, ::mlir::DataLayout layout,
-                     ArrayRef<Type> innerTypes) {
-    auto tagType = getTagType(ctx, innerTypes);
-    auto [dataSz, dataAlign] = getDataLayout(layout, innerTypes);
-    auto cnt = dataSz.getFixedValue() / dataAlign.value();
-    auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
-        mlir::IntegerType::get(ctx, 8), dataAlign.value());
-    auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
-    return {layout, {tagType, dataArea}};
-  }
+                     ArrayRef<Type> innerTypes);
   static ::mlir::LogicalResult
   verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
-         ArrayRef<Type> innerTypes, mlir::StringAttr name, bool incomplete) {
-    for (auto type : innerTypes) {
-      if (llvm::isa<RefType>(type))
-        return emitError() << "cannot have a reference type in a union type";
-      if (auto rcTy = llvm::dyn_cast<RcType>(type)) {
-        if (rcTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
-          return emitError()
-                 << "cannot have a non-frozen but freezable RC type "
-                    "in a union type, use mref instead";
-      }
-    }
-    if (name && name.getValue().empty()) {
-      emitError() << "an identified union type cannot have an empty name";
-      return mlir::failure();
-    }
-    return mlir::success();
-  }
+         ArrayRef<Type> innerTypes, mlir::StringAttr name, bool incomplete);
   static ::mlir::IntegerType getTagType(mlir::MLIRContext *ctx,
-                                        ArrayRef<Type> innerTypes) {
-    return ::mlir::IntegerType::get(
-        ctx, ::llvm::Log2_64(::llvm::PowerOf2Ceil(innerTypes.size())));
-  }
+                                        ArrayRef<Type> innerTypes);
   static std::pair<::llvm::TypeSize, ::llvm::Align>
-  getDataLayout(::mlir::DataLayout layout, ArrayRef<Type> innerTypes) {
-    ::llvm::TypeSize size = ::llvm::TypeSize::getFixed(0);
-    ::llvm::Align alignment{1};
-    for (auto type : innerTypes) {
-      size =
-          std::max(size, ::llvm::TypeSize::getFixed(layout.getTypeSize(type)));
-      alignment =
-          std::max(alignment, ::llvm::Align(layout.getTypeABIAlignment(type)));
-    }
-    size = ::llvm::alignTo(size, alignment.value());
-    return {size, alignment};
-  }
+  getDataLayout(::mlir::DataLayout layout, ArrayRef<Type> innerTypes);
 };
+
+extern template struct ContainerLikeTypeStorage<detail::CompositeTypeImpl>;
+extern template struct ContainerLikeTypeStorage<detail::UnionTypeImpl>;
+
 } // namespace detail
+
+extern template class ContainerLikeType<detail::CompositeTypeImpl>;
+extern template class ContainerLikeType<detail::UnionTypeImpl>;

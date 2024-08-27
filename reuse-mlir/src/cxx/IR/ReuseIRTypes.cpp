@@ -3,6 +3,7 @@
 #include "ReuseIR/IR/ReuseIRDialect.h"
 
 #include "ReuseIR/IR/ReuseIROpsEnums.h"
+#include "ReuseIR/Interfaces/ReuseIRCompositeLayoutInterface.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
@@ -330,5 +331,83 @@ void populateLLVMTypeConverter(CompositeLayoutCache &cache,
   });
 }
 
+namespace detail {
+CompositeLayout UnionTypeImpl::getCompositeLayout(mlir::MLIRContext *ctx,
+                                                  ::mlir::DataLayout layout,
+                                                  ArrayRef<Type> innerTypes) {
+  auto tagType = getTagType(ctx, innerTypes);
+  auto [dataSz, dataAlign] = getDataLayout(layout, innerTypes);
+  auto cnt = dataSz.getFixedValue() / dataAlign.value();
+  auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
+      mlir::IntegerType::get(ctx, 8), dataAlign.value());
+  auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
+  return {layout, {tagType, dataArea}};
+}
+LogicalResult
+UnionTypeImpl::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+                      ArrayRef<Type> innerTypes, mlir::StringAttr name,
+                      bool incomplete) {
+  for (auto type : innerTypes) {
+    if (llvm::isa<RefType>(type))
+      return emitError() << "cannot have a reference type in a union type";
+    if (auto rcTy = llvm::dyn_cast<RcType>(type)) {
+      if (rcTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
+        return emitError() << "cannot have a non-frozen but freezable RC type "
+                              "in a union type, use mref instead";
+    }
+  }
+  if (name && name.getValue().empty()) {
+    emitError() << "an identified union type cannot have an empty name";
+    return mlir::failure();
+  }
+  return mlir::success();
+}
+IntegerType UnionTypeImpl::getTagType(mlir::MLIRContext *ctx,
+                                      ArrayRef<Type> innerTypes) {
+  return ::mlir::IntegerType::get(
+      ctx, ::llvm::Log2_64(::llvm::PowerOf2Ceil(innerTypes.size())));
+}
+std::pair<::llvm::TypeSize, ::llvm::Align>
+UnionTypeImpl::getDataLayout(::mlir::DataLayout layout,
+                             ArrayRef<Type> innerTypes) {
+  ::llvm::TypeSize size = ::llvm::TypeSize::getFixed(0);
+  ::llvm::Align alignment{1};
+  for (auto type : innerTypes) {
+    size = std::max(size, ::llvm::TypeSize::getFixed(layout.getTypeSize(type)));
+    alignment =
+        std::max(alignment, ::llvm::Align(layout.getTypeABIAlignment(type)));
+  }
+  size = ::llvm::alignTo(size, alignment.value());
+  return {size, alignment};
+}
+CompositeLayout
+CompositeTypeImpl::getCompositeLayout(mlir::MLIRContext *ctx,
+                                      ::mlir::DataLayout layout,
+                                      ArrayRef<Type> innerTypes) {
+  return {layout, innerTypes};
+}
+LogicalResult CompositeTypeImpl::verify(
+    llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+    ArrayRef<Type> innerTypes, mlir::StringAttr name, bool incomplete) {
+  for (auto type : innerTypes) {
+    if (llvm::isa<RefType>(type))
+      return emitError() << "cannot have a reference type in a composite type";
+    if (auto rcTy = llvm::dyn_cast<RcType>(type)) {
+      if (rcTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
+        return emitError() << "cannot have a non-frozen but freezable RC type "
+                              "in a composite type, use mref instead";
+    }
+  }
+  if (name && name.getValue().empty()) {
+    emitError() << "an identified composite type cannot have an empty name";
+    return mlir::failure();
+  }
+  return mlir::success();
+}
+template struct ContainerLikeTypeStorage<detail::CompositeTypeImpl>;
+template struct ContainerLikeTypeStorage<detail::UnionTypeImpl>;
+} // namespace detail
+template class ContainerLikeType<detail::CompositeTypeImpl>;
+template class ContainerLikeType<detail::UnionTypeImpl>;
 } // namespace reuse_ir
 } // namespace mlir
