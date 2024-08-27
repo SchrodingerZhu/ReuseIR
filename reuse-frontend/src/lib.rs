@@ -1,14 +1,11 @@
 use ariadne::{Color, Label, Report, ReportKind, Source};
 
-use crate::surface::ErrMsg;
+use crate::syntax::surface::Msg;
 
-mod concrete;
-mod name;
-mod surface;
 mod syntax;
 
 #[allow(dead_code)]
-fn print_parse_errors<'src>(es: &[ErrMsg<'src>], src: &'src str) {
+fn print_parse_errors<'src>(es: &[Msg<'src>], src: &'src str) {
     es.iter().for_each(|e| {
         let range = e.span();
         let src_id = "<stdin>";

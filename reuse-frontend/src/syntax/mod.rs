@@ -1,4 +1,27 @@
-use crate::name::Ident;
+pub mod concrete;
+pub mod surface;
+
+use std::fmt::{Display, Formatter};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+pub type ID = u64;
+
+#[derive(Debug, Clone)]
+pub struct Ident<'src> {
+    pub raw: &'src str,
+    pub id: ID,
+}
+
+impl<'src> Display for Ident<'src> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.raw, self.id)
+    }
+}
+
+pub fn fresh() -> ID {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
 
 pub trait Syntax {}
 
@@ -7,6 +30,12 @@ pub trait Syntax {}
 pub struct Param<'src, T: Syntax> {
     pub name: Ident<'src>,
     pub typ: Box<T>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct File<'src, T: Syntax> {
+    pub decls: Box<[Decl<'src, T>]>,
 }
 
 #[allow(dead_code)]
