@@ -1,3 +1,4 @@
+pub mod r#abstract;
 pub mod concrete;
 pub mod surface;
 
@@ -26,7 +27,7 @@ pub fn fresh() -> ID {
 pub trait Syntax {}
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Param<'src, T: Syntax> {
     pub name: Ident<'src>,
     pub typ: Box<T>,

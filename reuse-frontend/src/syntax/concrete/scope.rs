@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::syntax::concrete::{DeclExpr, Expr, FileExpr, ParamExpr};
+use crate::syntax::concrete::{Decl, Expr, File, Param};
 use crate::syntax::{CtorParams, DataDef, Def, FnDef, Ident, ID};
 
 #[allow(dead_code)]
@@ -14,19 +14,19 @@ type NameMap<'src> = HashMap<&'src str, ID>;
 
 #[allow(dead_code)]
 #[derive(Default)]
-struct ScopeChecker<'src> {
+struct Checker<'src> {
     globals: NameMap<'src>,
     locals: NameMap<'src>,
 }
 
-impl<'src> ScopeChecker<'src> {
+impl<'src> Checker<'src> {
     #[allow(dead_code)]
-    pub fn check(file: &mut FileExpr<'src>) {
+    pub fn run(file: &mut File<'src>) {
         Self::default().file(file).unwrap();
     }
 
     #[allow(dead_code)]
-    fn file(&mut self, file: &mut FileExpr<'src>) -> Result<(), Error<'src>> {
+    fn file(&mut self, file: &mut File<'src>) -> Result<(), Error<'src>> {
         file.decls
             .iter()
             .try_fold((), |_, decl| self.insert_global(&decl.name))?;
@@ -36,7 +36,7 @@ impl<'src> ScopeChecker<'src> {
     }
 
     #[allow(dead_code)]
-    fn decl(&mut self, decl: &mut DeclExpr<'src>) -> Result<(), Error<'src>> {
+    fn decl(&mut self, decl: &mut Decl<'src>) -> Result<(), Error<'src>> {
         self.clear_locals();
 
         match &mut decl.def {
@@ -143,7 +143,7 @@ impl<'src> ScopeChecker<'src> {
     }
 
     #[allow(dead_code)]
-    fn param(&mut self, param: &mut ParamExpr<'src>) -> Result<(), Error<'src>> {
+    fn param(&mut self, param: &mut Param<'src>) -> Result<(), Error<'src>> {
         self.insert_local(&param.name);
         self.expr(&mut param.typ)
     }
@@ -156,11 +156,14 @@ impl<'src> ScopeChecker<'src> {
 
 #[cfg(test)]
 mod tests {
-    use crate::syntax::concrete::scope::ScopeChecker;
+    use crate::syntax::concrete::{scope, Expr, File};
     use crate::syntax::surface::parse;
+    use crate::syntax::{Def, FnDef};
 
-    fn check(src: &str) {
-        ScopeChecker::check(&mut parse(src));
+    fn check(src: &str) -> File {
+        let mut file = parse(src);
+        scope::Checker::run(&mut file);
+        file
     }
 
     #[test]
@@ -171,5 +174,31 @@ def f0(): None
 def f1(): f0
         ",
         );
+    }
+
+    #[test]
+    fn it_checks_lambda_scope() {
+        match &check("def f(x: str): lambda x: x\n").decls[0].def {
+            Def::Fn(FnDef {
+                val_params, body, ..
+            }) => {
+                let outer_id = val_params[0].name.id;
+                match body.as_ref() {
+                    Expr::Fn { params, body } => {
+                        let inner_id = params[0].id;
+                        match body.as_ref() {
+                            Expr::Ident(i) => {
+                                let id = i.id;
+                                assert_eq!(id, inner_id);
+                                assert_ne!(id, outer_id);
+                            }
+                            _ => assert!(false),
+                        }
+                    }
+                    _ => assert!(false),
+                }
+            }
+            _ => assert!(false),
+        };
     }
 }

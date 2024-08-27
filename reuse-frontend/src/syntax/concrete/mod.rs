@@ -1,17 +1,18 @@
 mod scope;
+mod r#type;
 
-use crate::syntax::{Ctor, CtorParams, Decl, File, Ident, Param, Syntax};
+use crate::syntax::{Ctor as C, CtorParams as CP, Decl as D, File as F, Ident, Param as P, Syntax};
 
 #[allow(dead_code)]
-pub type FileExpr<'src> = File<'src, Expr<'src>>;
+pub type File<'src> = F<'src, Expr<'src>>;
 #[allow(dead_code)]
-pub type DeclExpr<'src> = Decl<'src, Expr<'src>>;
+pub type Decl<'src> = D<'src, Expr<'src>>;
 #[allow(dead_code)]
-pub type ParamExpr<'src> = Param<'src, Expr<'src>>;
+pub type Param<'src> = P<'src, Expr<'src>>;
 #[allow(dead_code)]
-pub type CtorExpr<'src> = Ctor<'src, Expr<'src>>;
+pub type Ctor<'src> = C<'src, Expr<'src>>;
 #[allow(dead_code)]
-pub type CtorParamsExpr<'src> = CtorParams<'src, Expr<'src>>;
+pub type CtorParams<'src> = CP<'src, Expr<'src>>;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
