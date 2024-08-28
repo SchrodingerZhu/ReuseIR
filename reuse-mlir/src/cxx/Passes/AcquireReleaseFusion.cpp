@@ -52,7 +52,6 @@ void ReuseIRAcquireReleaseFusionPass::runOnOperation() {
   SmallVector<Release> releaseOps;
   SmallVector<Acquire> acquireOps;
   DenseSet<RcAcquireOp> toErase;
-  // TODO:
   func->walk([&](Operation *op) {
     if (auto release = dyn_cast<RcReleaseOp>(op))
       releaseOps.emplace_back(
