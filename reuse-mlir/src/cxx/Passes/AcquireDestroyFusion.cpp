@@ -9,9 +9,8 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LLVM.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/SmallVector.h"
 #include <algorithm>
-#include <llvm-20/llvm/ADT/SmallVector.h>
 #include <memory>
 
 namespace mlir {
