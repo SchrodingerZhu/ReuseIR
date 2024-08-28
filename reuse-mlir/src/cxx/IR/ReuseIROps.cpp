@@ -6,6 +6,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
 
@@ -175,6 +176,23 @@ template <StringLiteral Literal> struct PrintKeywordAsUnitAttr {
       printer.printKeywordOrString(Literal);
   }
 };
+
+ParseResult parseFusedIndices(OpAsmParser &parser, DenseI64ArrayAttr &attr) {
+  if (parser.parseOptionalKeyword("fused").failed()) {
+    attr = DenseI64ArrayAttr::get(parser.getContext(), {});
+    return success();
+  }
+  if (parser.parseLParen() || parser.parseAttribute(attr) ||
+      parser.parseRParen())
+    return LogicalResult::failure();
+  return success();
+}
+void printFusedIndices(OpAsmPrinter &printer, Operation *,
+                       const DenseI64ArrayAttr &attr) {
+  if (attr.empty())
+    return;
+  printer << "fused(" << attr << ")";
+}
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 

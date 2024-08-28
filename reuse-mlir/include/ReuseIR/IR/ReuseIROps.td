@@ -299,10 +299,13 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
   }];
 
   // TODO: Add type restrictions
-  let arguments = (ins Arg<ReuseIR_RefType, "destroyable object", [MemRead]>:$object);
+  let arguments = (ins 
+    Arg<ReuseIR_RefType, "destroyable object", [MemRead]>:$object,
+    DenseI64ArrayAttr:$fusedIndices
+  );
 
   let assemblyFormat = [{
-    `(` $object `:` type($object) `)` attr-dict
+    `(` $object `:` type($object) `)` custom<FusedIndices>($fusedIndices) attr-dict
   }];
   
   // TODO: add verifier
