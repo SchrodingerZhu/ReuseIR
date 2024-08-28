@@ -12,7 +12,7 @@ namespace reuse_ir {
 std::unique_ptr<Pass> createConvertReuseIRToLLVMPass();
 std::unique_ptr<Pass> createReuseIRClosureOutliningPass();
 std::unique_ptr<Pass> createReuseIRExpandControlFlowPass();
-std::unique_ptr<Pass> createReuseIRAcquireDestroyFusionPass();
+std::unique_ptr<Pass> createReuseIRAcquireReleaseFusionPass();
 
 #define GEN_PASS_CLASSES
 #define GEN_PASS_REGISTRATION

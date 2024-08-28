@@ -177,7 +177,8 @@ template <StringLiteral Literal> struct PrintKeywordAsUnitAttr {
   }
 };
 
-ParseResult parseFusedIndices(OpAsmParser &parser, DenseI64ArrayAttr &attr) {
+static ParseResult parseFusedIndices(OpAsmParser &parser,
+                                     DenseI64ArrayAttr &attr) {
   if (parser.parseOptionalKeyword("fused").failed()) {
     attr = DenseI64ArrayAttr::get(parser.getContext(), {});
     return success();
@@ -187,8 +188,8 @@ ParseResult parseFusedIndices(OpAsmParser &parser, DenseI64ArrayAttr &attr) {
     return LogicalResult::failure();
   return success();
 }
-void printFusedIndices(OpAsmPrinter &printer, Operation *,
-                       const DenseI64ArrayAttr &attr) {
+static void printFusedIndices(OpAsmPrinter &printer, Operation *,
+                              const DenseI64ArrayAttr &attr) {
   if (attr.empty())
     return;
   printer << "fused(" << attr << ")";

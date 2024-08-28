@@ -187,10 +187,13 @@ def RcReleaseOp : ReuseIR_Op<"rc.release"> {
     - If the target rc is not freezable, it returns a nullable token.
   }];
 
-  let arguments = (ins Arg<ReuseIR_RcType, "target rc pointer", [MemReadAt<0>, MemWriteAt<1>]>:$rcPtr);
+  let arguments = (ins 
+    Arg<ReuseIR_RcType, "target rc pointer", [MemReadAt<0>, MemWriteAt<1>]>:$rcPtr,
+    DenseI64ArrayAttr:$fusedIndices
+  );
   let results = (outs Res<Optional<ReuseIR_NullableToken>, "token">:$token);
   let assemblyFormat = [{
-    `(` $rcPtr `:` type($rcPtr) `)` attr-dict  (`:` type($token)^)?
+    `(` $rcPtr `:` type($rcPtr) `)` custom<FusedIndices>($fusedIndices) attr-dict  (`:` type($token)^)?
   }];
 
   let hasVerifier = 1;

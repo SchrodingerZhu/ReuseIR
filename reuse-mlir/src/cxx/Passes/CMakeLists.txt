@@ -3,7 +3,7 @@ add_mlir_dialect_library(MLIRReuseIRPasses
     ConvertReuseIRToLLVM.cpp
     ClosureOutlining.cpp
     ExpandControlFlow.cpp
-    AcquireDestroyFusion.cpp
+    AcquireReleaseFusion.cpp
   DEPENDS
     MLIRReuseIR
     MLIRReuseIRAnalysis
