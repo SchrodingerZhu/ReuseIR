@@ -424,4 +424,29 @@ def ClosureVTableOp : ReuseIR_Op<"closure.vtable"> {
     `}` 
   }];
 }
+
+def CompositeAssembleOp : ReuseIR_Op<"composite.assemble"> {
+  let summary = "Create a new composite object";
+  let description = [{
+    `reuse_ir.composite.assemble` creates a new composite object.
+  }];
+  let results = (outs Res<ReuseIR_CompositeType, "Composite Object">:$composite);
+  let arguments = (ins Variadic<AnyType>:$fields);
+  let assemblyFormat = [{
+    `(` $fields `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def RcCreateOp : ReuseIR_Op<"rc.create"> {
+  let summary = "Create a new Rc object";
+  let description = [{
+    `reuse_ir.rc.create` creates a new Rc object.
+  }];
+  let results = (outs Res<ReuseIR_RcType, "Rc Object", [MemAlloc<DefaultResource>]>:$rc);
+  let arguments = (ins AnyType:$value, Optional<ReuseIR_NullableToken>:$token);
+  let assemblyFormat = [{
+    `value` `(` $value `)` (`token` `(` $token^ `)` )? attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 #endif // REUSE_IR_OPS
