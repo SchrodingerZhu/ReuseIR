@@ -36,5 +36,13 @@ def ReuseIRExpandControlFlow : Pass<"reuse-ir-expand-control-flow", "::mlir::Mod
   let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect", "::mlir::scf::SCFDialect"];
 }
 
+def ReuseIRAcquireReleaseFusion : Pass<"reuse-ir-acquire-release-fusion", "::mlir::func::FuncOp"> {
+  let summary = "Fuse ReuseIR acquire and release Operations";
+  let description = [{
+    This pass is used to fuse acquire and release operations.
+  }];
+  let constructor = "::mlir::reuse_ir::createReuseIRAcquireReleaseFusionPass()";
+  let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
+}
 
 #endif // REUSE_IR_PASSES

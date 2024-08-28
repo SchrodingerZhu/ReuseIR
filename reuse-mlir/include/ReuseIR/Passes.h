@@ -2,6 +2,7 @@
 
 #include "ReuseIR/Common.h"
 #include "ReuseIR/IR/ReuseIROps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
@@ -11,6 +12,7 @@ namespace reuse_ir {
 std::unique_ptr<Pass> createConvertReuseIRToLLVMPass();
 std::unique_ptr<Pass> createReuseIRClosureOutliningPass();
 std::unique_ptr<Pass> createReuseIRExpandControlFlowPass();
+std::unique_ptr<Pass> createReuseIRAcquireReleaseFusionPass();
 
 #define GEN_PASS_CLASSES
 #define GEN_PASS_REGISTRATION

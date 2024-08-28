@@ -3,11 +3,14 @@ add_mlir_dialect_library(MLIRReuseIRPasses
     ConvertReuseIRToLLVM.cpp
     ClosureOutlining.cpp
     ExpandControlFlow.cpp
+    AcquireReleaseFusion.cpp
   DEPENDS
     MLIRReuseIR
+    MLIRReuseIRAnalysis
     MLIRReuseIRPassIncGen
   LINK_COMPONENTS
     Core
   LINK_LIBS PUBLIC
     MLIRReuseIR
+    MLIRReuseIRAnalysis
 )
