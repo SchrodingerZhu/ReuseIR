@@ -36,4 +36,5 @@ def ReuseIRExpandControlFlow : Pass<"reuse-ir-expand-control-flow", "::mlir::Mod
   let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect", "::mlir::scf::SCFDialect"];
 }
 
+
 #endif // REUSE_IR_PASSES
