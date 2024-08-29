@@ -151,7 +151,25 @@ mlir::reuse_ir::LogicalResult RcReleaseOp::verify() {
       getNumResults() != 1)
     return emitOpError("must have a result when applied to a nonfreezing RC "
                        "pointer");
-  return mlir::reuse_ir::success();
+  RcBoxType rcBoxTy =
+      RcBoxType::get(getContext(), rcPtrTy.getPointee(),
+                     rcPtrTy.getAtomicKind(), rcPtrTy.getFreezingKind());
+  // get current module
+  if (!getToken())
+    return mlir::reuse_ir::success();
+  if (auto module = getOperation()->getParentOfType<ModuleOp>()) {
+    // TODO: revise this if it is causing performance issues
+    DataLayout dataLayout{module};
+    auto size = dataLayout.getTypeSize(rcBoxTy);
+    auto align = dataLayout.getTypeABIAlignment(rcBoxTy);
+    auto tokenTy = cast<TokenType>(getToken().getType().getPointer());
+    if (tokenTy.getAlignment() != align || tokenTy.getSize() != size)
+      return emitOpError("expected to return a nullable token of size ")
+             << size.getFixedValue() << " and alignment " << align
+             << ", but found a nullable token of type " << tokenTy;
+    return mlir::reuse_ir::success();
+  }
+  return emitOpError("cannot find the module containing the operation");
 }
 
 // RcDecreaseOp
