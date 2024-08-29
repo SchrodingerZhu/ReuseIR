@@ -15,6 +15,10 @@ set(MLIR_TABLEGEN_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/include)
 message(STATUS "Tablegen output directory: ${MLIR_TABLEGEN_OUTPUT_DIR}")
 include_directories(include ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS} ${MLIR_TABLEGEN_OUTPUT_DIR})
 
+if (REUSE_IR_ENABLE_TESTS)
+  add_compile_definitions(REUSE_IR_ENABLE_TESTS=1)
+endif()
+
 add_subdirectory(contrib)
 add_subdirectory(include)
 add_subdirectory(src)

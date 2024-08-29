@@ -1,3 +1,6 @@
+if (REUSE_IR_ENABLE_TESTS)
+  add_subdirectory(test)
+endif()
 add_mlir_dialect_library(MLIRReuseIRPasses
   STATIC
     ConvertReuseIRToLLVM.cpp
