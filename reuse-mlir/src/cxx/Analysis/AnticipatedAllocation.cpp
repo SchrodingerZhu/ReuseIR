@@ -22,7 +22,7 @@ TokenType AnticipatedAllocAnalysis::getToken(RcType type) {
                         layout.getSize());
 }
 
-LogicalResult
+AnticipatedAllocAnalysis::RetType
 AnticipatedAllocAnalysis::visitOperation(Operation *op,
                                          const AnticipatedAllocLattice &after,
                                          AnticipatedAllocLattice *before) {
@@ -34,7 +34,11 @@ AnticipatedAllocAnalysis::visitOperation(Operation *op,
     }
   }
   propagateIfChanged(before, before->meet(after) | changed);
+#if LLVM_VERSION_MAJOR < 20
+  return;
+#else
   return LogicalResult::success();
+#endif
 }
 
 void AnticipatedAllocAnalysis::setToExitState(

@@ -8,11 +8,13 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/STLExtras.h"
+#include <type_traits>
 namespace mlir::dataflow {
 namespace reuse_ir {
 using namespace mlir::reuse_ir;
@@ -38,6 +40,11 @@ class AnticipatedAllocAnalysis
 private:
   CompositeLayoutCache layoutCache;
   TokenType getToken(RcType type);
+#if LLVM_VERSION_MAJOR < 20
+  using RetType = void;
+#else
+  using RetType = LogicalResult;
+#endif
 
 public:
   template <typename... Args>
@@ -47,9 +54,8 @@ public:
                                                                symbolTable),
         layoutCache(dataLayout) {}
 
-  LogicalResult visitOperation(Operation *op,
-                               const AnticipatedAllocLattice &after,
-                               AnticipatedAllocLattice *before) override final;
+  RetType visitOperation(Operation *op, const AnticipatedAllocLattice &after,
+                         AnticipatedAllocLattice *before) override final;
   void setToExitState(AnticipatedAllocLattice *lattice) override final;
 };
 } // namespace reuse_ir
