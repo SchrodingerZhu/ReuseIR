@@ -1,4 +1,3 @@
-use crate::print_parse_errors;
 use chumsky::error::Rich;
 use chumsky::extra::Err;
 use chumsky::prelude::{choice, just, none_of, one_of};
@@ -6,8 +5,9 @@ use chumsky::recursive::recursive;
 use chumsky::text::{digits, ident, inline_whitespace, int, newline, whitespace};
 use chumsky::{IterParser, Parser};
 
-use crate::syntax::concrete::{Ctor, CtorParams, Expr, File, Param};
-use crate::syntax::{fresh, DataDef, Decl, Def, FnDef, Ident};
+use crate::print_parse_errors;
+use crate::syntax::concrete::{Decl, Def, Expr, File};
+use crate::syntax::{fresh, Ctor, CtorParams, DataDef, FnDef, FnSig, Ident, Param};
 
 pub type Msg<'src> = Rich<'src, char>;
 
@@ -40,11 +40,11 @@ fn file<'src>() -> out!(File<'src>) {
         })
 }
 
-fn decl<'src>() -> out!(Decl<'src, Expr<'src>>) {
+fn decl<'src>() -> out!(Decl<'src>) {
     fn_decl().or(data_decl())
 }
 
-fn fn_decl<'src>() -> out!(Decl<'src, Expr<'src>>) {
+fn fn_decl<'src>() -> out!(Decl<'src>) {
     just("def")
         .padded()
         .ignore_then(identifier())
@@ -68,16 +68,18 @@ fn fn_decl<'src>() -> out!(Decl<'src, Expr<'src>>) {
         .map(|((((name, typ_params), val_params), ret), body)| Decl {
             name,
             def: Def::Fn(FnDef {
-                typ_params: typ_params.unwrap_or_default(),
-                val_params,
-                eff: Box::new(Expr::Pure), // TODO: parse effects
-                ret: ret.unwrap_or_else(|| Box::new(Expr::NoneType)),
+                sig: FnSig {
+                    typ_params: typ_params.unwrap_or_default(),
+                    val_params,
+                    eff: Box::new(Expr::Pure), // TODO: parse effects
+                    ret: ret.unwrap_or_else(|| Box::new(Expr::NoneType)),
+                },
                 body,
             }),
         })
 }
 
-fn data_decl<'src>() -> out!(Decl<'src, Expr<'src>>) {
+fn data_decl<'src>() -> out!(Decl<'src>) {
     just("data")
         .padded()
         .ignore_then(identifier())
@@ -97,7 +99,7 @@ fn data_decl<'src>() -> out!(Decl<'src, Expr<'src>>) {
         })
 }
 
-fn ctors<'src>() -> out!(Box<[Ctor<'src>]>) {
+fn ctors<'src>() -> out!(Box<[Ctor<'src, Expr<'src>>]>) {
     ctor()
         .padded_by(inline_whitespace())
         .repeated()
@@ -106,7 +108,7 @@ fn ctors<'src>() -> out!(Box<[Ctor<'src>]>) {
         .map(Vec::into_boxed_slice)
 }
 
-fn ctor<'src>() -> out!(Ctor<'src>) {
+fn ctor<'src>() -> out!(Ctor<'src, Expr<'src>>) {
     identifier()
         .then_ignore(inline_whitespace())
         .then(
@@ -120,7 +122,7 @@ fn ctor<'src>() -> out!(Ctor<'src>) {
         .map(|(name, params)| Ctor { name, params })
 }
 
-fn ctor_unnamed_params<'src>() -> out!(CtorParams<'src>) {
+fn ctor_unnamed_params<'src>() -> out!(CtorParams<'src, Expr<'src>>) {
     just('(')
         .ignore_then(whitespace())
         .ignore_then(
@@ -137,7 +139,7 @@ fn ctor_unnamed_params<'src>() -> out!(CtorParams<'src>) {
         .then_ignore(just(')'))
 }
 
-fn ctor_named_params<'src>() -> out!(CtorParams<'src>) {
+fn ctor_named_params<'src>() -> out!(CtorParams<'src, Expr<'src>>) {
     just('(')
         .ignore_then(whitespace())
         .ignore_then(
@@ -275,7 +277,7 @@ fn type_expr<'src>() -> out!(Box<Expr<'src>>) {
     })
 }
 
-fn param<'src>() -> out!(Param<'src>) {
+fn param<'src>() -> out!(Param<'src, Expr<'src>>) {
     identifier()
         .then_ignore(whitespace())
         .then_ignore(just(':'))
@@ -284,7 +286,7 @@ fn param<'src>() -> out!(Param<'src>) {
         .map(|(name, typ)| Param { name, typ })
 }
 
-fn val_params<'src>() -> out!(Box<[Param<'src>]>) {
+fn val_params<'src>() -> out!(Box<[Param<'src, Expr<'src>>]>) {
     just('(')
         .ignore_then(whitespace())
         .ignore_then(
@@ -301,7 +303,7 @@ fn val_params<'src>() -> out!(Box<[Param<'src>]>) {
         .then_ignore(just(')'))
 }
 
-fn typ_params<'src>() -> out!(Box<[Param<'src>]>) {
+fn typ_params<'src>() -> out!(Box<[Param<'src, Expr<'src>>]>) {
     just('[')
         .ignore_then(whitespace())
         .ignore_then(

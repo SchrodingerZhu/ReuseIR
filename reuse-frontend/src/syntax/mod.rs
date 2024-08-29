@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 pub type ID = u64;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Ident<'src> {
     pub raw: &'src str,
     pub id: ID,
@@ -35,31 +35,17 @@ pub struct Param<'src, T: Syntax> {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct File<'src, T: Syntax> {
-    pub decls: Box<[Decl<'src, T>]>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct Decl<'src, T: Syntax> {
-    pub name: Ident<'src>,
-    pub def: Def<'src, T>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub enum Def<'src, T: Syntax> {
-    Fn(FnDef<'src, T>),
-    Data(DataDef<'src, T>),
+pub struct FnSig<'src, T: Syntax> {
+    pub typ_params: Box<[Param<'src, T>]>,
+    pub val_params: Box<[Param<'src, T>]>,
+    pub eff: Box<T>,
+    pub ret: Box<T>,
 }
 
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct FnDef<'src, T: Syntax> {
-    pub typ_params: Box<[Param<'src, T>]>,
-    pub val_params: Box<[Param<'src, T>]>,
-    pub eff: Box<T>,
-    pub ret: Box<T>,
+    pub sig: FnSig<'src, T>,
     pub body: Box<T>,
 }
 

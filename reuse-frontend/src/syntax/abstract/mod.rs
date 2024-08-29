@@ -1,15 +1,12 @@
-use crate::syntax::{Ctor as C, CtorParams as CP, Decl as D, File as F, Ident, Param as P, Syntax};
+use crate::syntax::{DataDef, FnDef, FnSig, Ident, Param, Syntax};
 
 #[allow(dead_code)]
-pub type File<'src> = F<'src, Term<'src>>;
-#[allow(dead_code)]
-pub type Decl<'src> = D<'src, Term<'src>>;
-#[allow(dead_code)]
-pub type Param<'src> = P<'src, Term<'src>>;
-#[allow(dead_code)]
-pub type Ctor<'src> = C<'src, Term<'src>>;
-#[allow(dead_code)]
-pub type CtorParams<'src> = CP<'src, Term<'src>>;
+#[derive(Debug)]
+pub enum WellTyped<'src> {
+    Fn(FnDef<'src, Term<'src>>),
+    UndefFn(FnSig<'src, Term<'src>>),
+    Data(DataDef<'src, Term<'src>>),
+}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -42,11 +39,11 @@ pub enum Term<'src> {
         body: Box<Term<'src>>,
     },
     GenericFnType {
-        param: Param<'src>,
+        param: Param<'src, Term<'src>>,
         body: Box<Term<'src>>,
     },
     GenericFn {
-        param: Param<'src>,
+        param: Param<'src, Term<'src>>,
         body: Box<Term<'src>>,
     },
 

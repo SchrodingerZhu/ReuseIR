@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::syntax::concrete::{Decl, Expr, File, Param};
-use crate::syntax::{CtorParams, DataDef, Def, FnDef, Ident, ID};
+use crate::syntax::concrete::{Decl, Def, Expr, File};
+use crate::syntax::{CtorParams, DataDef, FnDef, FnSig, Ident, Param, ID};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -41,10 +41,13 @@ impl<'src> Checker<'src> {
 
         match &mut decl.def {
             Def::Fn(FnDef {
-                typ_params,
-                val_params,
-                eff,
-                ret,
+                sig:
+                    FnSig {
+                        typ_params,
+                        val_params,
+                        eff,
+                        ret,
+                    },
                 body,
             }) => {
                 typ_params.iter_mut().try_fold((), |_, p| self.param(p))?;
@@ -143,7 +146,7 @@ impl<'src> Checker<'src> {
     }
 
     #[allow(dead_code)]
-    fn param(&mut self, param: &mut Param<'src>) -> Result<(), Error<'src>> {
+    fn param(&mut self, param: &mut Param<'src, Expr<'src>>) -> Result<(), Error<'src>> {
         self.insert_local(&param.name);
         self.expr(&mut param.typ)
     }
@@ -156,9 +159,9 @@ impl<'src> Checker<'src> {
 
 #[cfg(test)]
 mod tests {
-    use crate::syntax::concrete::{scope, Expr, File};
+    use crate::syntax::concrete::{scope, Def, Expr, File};
     use crate::syntax::surface::parse;
-    use crate::syntax::{Def, FnDef};
+    use crate::syntax::{FnDef, FnSig};
 
     fn check(src: &str) -> File {
         let mut file = parse(src);
@@ -180,7 +183,9 @@ def f1(): f0
     fn it_checks_lambda_scope() {
         match &check("def f(x: str): lambda x: x\n").decls[0].def {
             Def::Fn(FnDef {
-                val_params, body, ..
+                sig: FnSig { val_params, .. },
+                body,
+                ..
             }) => {
                 let outer_id = val_params[0].name.id;
                 match body.as_ref() {

@@ -1,18 +1,27 @@
+use crate::syntax::{DataDef, FnDef, Ident, Syntax};
+
 mod scope;
 mod r#type;
 
-use crate::syntax::{Ctor as C, CtorParams as CP, Decl as D, File as F, Ident, Param as P, Syntax};
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct File<'src> {
+    pub decls: Box<[Decl<'src>]>,
+}
 
 #[allow(dead_code)]
-pub type File<'src> = F<'src, Expr<'src>>;
+#[derive(Debug)]
+pub struct Decl<'src> {
+    pub name: Ident<'src>,
+    pub def: Def<'src>,
+}
+
 #[allow(dead_code)]
-pub type Decl<'src> = D<'src, Expr<'src>>;
-#[allow(dead_code)]
-pub type Param<'src> = P<'src, Expr<'src>>;
-#[allow(dead_code)]
-pub type Ctor<'src> = C<'src, Expr<'src>>;
-#[allow(dead_code)]
-pub type CtorParams<'src> = CP<'src, Expr<'src>>;
+#[derive(Debug)]
+pub enum Def<'src> {
+    Fn(FnDef<'src, Expr<'src>>),
+    Data(DataDef<'src, Expr<'src>>),
+}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
