@@ -7,6 +7,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/SmallVector.h"
@@ -24,7 +25,7 @@ struct ReuseIRAcquireReleaseFusionPass
 };
 
 struct Acquire {
-  RcAcquireOp acquire;
+  RcAcquireOp operation;
   TypedValue<RcType> borrowSource;
   size_t projIndex;
 };
@@ -44,6 +45,7 @@ void ReuseIRAcquireReleaseFusionPass::runOnOperation() {
 
   // get the dominance information
   auto &domInfo = getAnalysis<DominanceInfo>();
+  auto &postDomInfo = getAnalysis<PostDominanceInfo>();
 
   mlir::AliasAnalysis aliasAnalysis(getOperation());
   aliasAnalysis.addAnalysisImplementation(::mlir::reuse_ir::AliasAnalysis());
@@ -51,41 +53,81 @@ void ReuseIRAcquireReleaseFusionPass::runOnOperation() {
   // Collect operations to be considered by the pass.
   SmallVector<Release> releaseOps;
   SmallVector<Acquire> acquireOps;
-  DenseSet<RcAcquireOp> toErase;
+  SmallVector<RcAcquireOp> allAcquireOps;
+  DenseSet<Operation *> toErase;
+  DenseSet<RcReleaseOp> toRewrite;
   func->walk([&](Operation *op) {
     if (auto release = dyn_cast<RcReleaseOp>(op))
       releaseOps.emplace_back(
           release, SmallVector<int64_t>(release.getFusedIndices().begin(),
                                         release.getFusedIndices().end()));
-    else if (auto acq = dyn_cast<RcAcquireOp>(op))
-      if (auto load = dyn_cast<LoadOp>(acq.getRcPtr().getDefiningOp()))
-        if (auto proj = dyn_cast<ProjOp>(load.getObject().getDefiningOp()))
-          if (auto borrow =
-                  dyn_cast<RcBorrowOp>(proj.getObject().getDefiningOp()))
+    else if (auto acq = dyn_cast_or_null<RcAcquireOp>(op)) {
+      allAcquireOps.push_back(acq);
+      if (auto load = dyn_cast_or_null<LoadOp>(acq.getRcPtr().getDefiningOp()))
+        if (auto proj =
+                dyn_cast_or_null<ProjOp>(load.getObject().getDefiningOp()))
+          if (auto borrow = dyn_cast_or_null<RcBorrowOp>(
+                  proj.getObject().getDefiningOp()))
             acquireOps.push_back({acq, borrow.getObject(), proj.getIndex()});
+    }
   });
   for (auto &release : releaseOps) {
     auto rc = release.operation.getRcPtr();
     for (auto acq : acquireOps) {
       if ( // avoid repeated fusion
-          !toErase.contains(acq.acquire) &&
+          !toErase.contains(acq.operation) &&
           // destroy the container of an acquire operation
           aliasAnalysis.alias(rc, acq.borrowSource) == AliasResult::MustAlias &&
-          // the acquire operation dominates the destroy
-          domInfo.dominates(acq.acquire, release.operation) &&
+          // the acquire operation dominates the release operation and the
+          // release operation post-dominates the acquire operation
+          domInfo.dominates(acq.operation, release.operation) &&
+          postDomInfo.postDominates(release.operation, acq.operation) &&
           // skip already fused operations
           !release.contains(acq.projIndex)) {
         release.fusedIndices.push_back(acq.projIndex);
-        toErase.insert(acq.acquire);
+        toErase.insert(acq.operation);
       }
     }
   }
-  for (auto acq : toErase)
-    acq.erase();
-  for (auto &rel : releaseOps)
-    rel.operation.setFusedIndices(rel.fusedIndices);
-}
+  // fuse trivial release after acquire
+  for (auto &acq : allAcquireOps) {
+    // skip already fused operations
+    if (toErase.contains(acq))
+      continue;
+    for (auto &rel : releaseOps) {
+      // skip already fused operations
+      if (!rel.fusedIndices.empty() || toErase.contains(rel.operation))
+        continue;
+      // check the following conditions:
+      // - acq and rel are applied to the same object
+      // - acq dominates rel
+      // - acq post-dominates rel
+      // - rel has no other users
+      if (aliasAnalysis.alias(acq.getRcPtr(), rel.operation.getRcPtr()) ==
+              AliasResult::MustAlias &&
+          domInfo.dominates(acq, rel.operation) &&
+          postDomInfo.postDominates(rel.operation, acq)) {
+        toErase.insert(acq);
+        if (!rel.operation.getToken() || rel.operation.getToken().use_empty())
+          toErase.insert(rel.operation);
+        else
+          toRewrite.insert(rel.operation);
+      }
+    }
+  }
 
+  // apply the changes
+  IRRewriter rewriter(&getContext());
+  for (auto *op : toErase)
+    rewriter.eraseOp(op);
+  for (auto op : toRewrite) {
+    rewriter.setInsertionPoint(op);
+    rewriter.replaceOpWithNewOp<NullableNullOp>(op, op->getResultTypes());
+  }
+  for (auto &rel : releaseOps)
+    if (!toErase.contains(rel.operation))
+      rel.operation.setFusedIndices(rel.fusedIndices);
+}
 } // namespace REUSE_IR_DECL_SCOPE
 
 namespace reuse_ir {

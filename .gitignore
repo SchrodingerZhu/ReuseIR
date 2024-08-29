@@ -43,6 +43,7 @@ Cargo.lock
 
 # VSCode
 .vscode/
+.devcontainer/
 .cache
 
 # JetBrains
