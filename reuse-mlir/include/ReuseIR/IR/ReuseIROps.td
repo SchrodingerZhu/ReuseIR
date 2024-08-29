@@ -435,18 +435,27 @@ def CompositeAssembleOp : ReuseIR_Op<"composite.assemble"> {
   let assemblyFormat = [{
     `(` $fields `)` attr-dict `:` functional-type(operands, results)
   }];
+  let hasVerifier = 1;
 }
 
-def RcCreateOp : ReuseIR_Op<"rc.create"> {
+def RcCreateOp : ReuseIR_Op<"rc.create", [AttrSizedOperandSegments]> {
   let summary = "Create a new Rc object";
   let description = [{
     `reuse_ir.rc.create` creates a new Rc object.
   }];
   let results = (outs Res<ReuseIR_RcType, "Rc Object", [MemAlloc<DefaultResource>]>:$rc);
-  let arguments = (ins AnyType:$value, Optional<ReuseIR_NullableToken>:$token);
+  let arguments = (ins 
+    AnyType:$value, 
+    Optional<ReuseIR_NullableToken>:$token,
+    Optional<ReuseIR_RegionCtxType>:$region
+  );
   let assemblyFormat = [{
-    `value` `(` $value `)` (`token` `(` $token^ `)` )? attr-dict `:` functional-type(operands, results)
+    `value` `(` $value `)`
+    (`token` `(` $token^ `)` )?
+    (`region` `(` $region^ `)`)?
+    attr-dict `:` functional-type(operands, results)
   }];
+  let hasVerifier = 1;
 }
 
 #endif // REUSE_IR_OPS

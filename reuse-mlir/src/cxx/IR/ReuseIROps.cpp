@@ -5,6 +5,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -138,6 +139,26 @@ mlir::reuse_ir::LogicalResult ClosureYieldOp::verify() {
   return mlir::reuse_ir::success();
 }
 
+template <typename EmitError>
+static LogicalResult verifyTokenForRC(Operation *op, TokenType token, RcType rc,
+                                      EmitError emitOpError,
+                                      bool isReturn = false) {
+  auto module = op->getParentOfType<ModuleOp>();
+  if (!module)
+    return emitOpError("cannot find the module containing the operation");
+  DataLayout dataLayout{module};
+  auto rcBoxTy = RcBoxType::get(op->getContext(), rc.getPointee(),
+                                rc.getAtomicKind(), rc.getFreezingKind());
+  auto size = dataLayout.getTypeSize(rcBoxTy);
+  auto align = dataLayout.getTypeABIAlignment(rcBoxTy);
+  if (token.getAlignment() != align || token.getSize() != size)
+    return emitOpError("expected")
+           << (isReturn ? " to return " : " ") << "a nullable token of size "
+           << size.getFixedValue() << " and alignment " << align
+           << ", but found a nullable token of type " << token;
+  return success();
+}
+
 // RcReleaseOp
 mlir::reuse_ir::LogicalResult RcReleaseOp::verify() {
   RcType rcPtrTy = getRcPtr().getType();
@@ -151,25 +172,13 @@ mlir::reuse_ir::LogicalResult RcReleaseOp::verify() {
       getNumResults() != 1)
     return emitOpError("must have a result when applied to a nonfreezing RC "
                        "pointer");
-  RcBoxType rcBoxTy =
-      RcBoxType::get(getContext(), rcPtrTy.getPointee(),
-                     rcPtrTy.getAtomicKind(), rcPtrTy.getFreezingKind());
   // get current module
   if (!getToken())
     return mlir::reuse_ir::success();
-  if (auto module = getOperation()->getParentOfType<ModuleOp>()) {
-    // TODO: revise this if it is causing performance issues
-    DataLayout dataLayout{module};
-    auto size = dataLayout.getTypeSize(rcBoxTy);
-    auto align = dataLayout.getTypeABIAlignment(rcBoxTy);
-    auto tokenTy = cast<TokenType>(getToken().getType().getPointer());
-    if (tokenTy.getAlignment() != align || tokenTy.getSize() != size)
-      return emitOpError("expected to return a nullable token of size ")
-             << size.getFixedValue() << " and alignment " << align
-             << ", but found a nullable token of type " << tokenTy;
-    return mlir::reuse_ir::success();
-  }
-  return emitOpError("cannot find the module containing the operation");
+  auto tokenTy = cast<TokenType>(getToken().getType().getPointer());
+  return verifyTokenForRC(
+      this->getOperation(), tokenTy, rcPtrTy,
+      [&](const Twine &msg) { return emitOpError(msg); }, true);
 }
 
 // RcDecreaseOp
@@ -180,6 +189,50 @@ mlir::reuse_ir::LogicalResult RcDecreaseOp::verify() {
   return mlir::reuse_ir::success();
 }
 
+// CompositeAssembleOp
+mlir::reuse_ir::LogicalResult CompositeAssembleOp::verify() {
+  CompositeType compositeTy = dyn_cast<CompositeType>(getType());
+  if (!compositeTy)
+    return emitOpError("must return a composite type");
+  if (!compositeTy.isComplete())
+    return emitOpError("cannot assemble an incomplete composite type");
+  if (compositeTy.getInnerTypes().size() != getNumOperands())
+    return emitOpError("the number of operands must match the number of "
+                       "fields in the composite type");
+  for (size_t i = 0; i < getNumOperands(); ++i)
+    if (getOperand(i).getType() != compositeTy.getInnerTypes()[i])
+      return emitOpError("the type of operand #")
+             << i << " must match the type of the field in the composite type";
+  return mlir::reuse_ir::success();
+}
+
+// RcCreateOp
+mlir::reuse_ir::LogicalResult RcCreateOp::verify() {
+  RcType rcPtrTy = getType();
+  switch (rcPtrTy.getFreezingKind().getValue()) {
+  case FreezingKind::frozen:
+    return emitOpError("cannot create a frozen RC pointer");
+  case FreezingKind::nonfreezing:
+    if (getRegion())
+      return emitOpError("cannot have a region when creating a nonfreezing RC "
+                         "pointer");
+    break;
+  case FreezingKind::unfrozen:
+    if (!getRegion())
+      return emitOpError("must have a region when creating an unfrozen RC "
+                         "pointer");
+    if (getToken())
+      return emitOpError("cannot have a token when creating an unfrozen RC "
+                         "pointer");
+    break;
+  }
+  if (auto token = getToken()) {
+    auto tokenTy = cast<TokenType>(token.getType().getPointer());
+    return verifyTokenForRC(this->getOperation(), tokenTy, rcPtrTy,
+                            [&](const Twine &msg) { return emitOpError(msg); });
+  }
+  return mlir::reuse_ir::success();
+}
 template <StringLiteral Literal> struct ParseKeywordAsUnitAttr {
   OptionalParseResult operator()(OpAsmParser &parser, UnitAttr &attr) {
     if (parser.parseOptionalKeyword(Literal).succeeded())
