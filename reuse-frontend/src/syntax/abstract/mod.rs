@@ -2,7 +2,20 @@ use crate::syntax::{DataDef, FnDef, FnSig, Ident, Param, Syntax};
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub enum WellTyped<'src> {
+pub struct File<'src> {
+    pub decls: Box<[Decl<'src>]>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct Decl<'src> {
+    pub name: Ident<'src>,
+    pub def: Def<'src>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub enum Def<'src> {
     Fn(FnDef<'src, Term<'src>>),
     UndefFn(FnSig<'src, Term<'src>>),
     Data(DataDef<'src, Term<'src>>),

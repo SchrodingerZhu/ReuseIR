@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
 use crate::syntax::concrete::{Decl, Def, Expr, File};
-use crate::syntax::r#abstract::{Term, WellTyped};
-use crate::syntax::{Ctor, CtorParams, DataDef, FnDef, FnSig, Param, ID};
+use crate::syntax::r#abstract::{
+    Decl as WellTypedDecl, Def as WellTypedDef, File as WellTypedFile, Term,
+};
+use crate::syntax::{Ctor, CtorParams, DataDef, FnDef, FnSig, Ident, Param, ID};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -31,28 +33,37 @@ impl<'src> Inferred<'src> {
 #[allow(dead_code)]
 #[derive(Default)]
 struct Checker<'src> {
-    globals: HashMap<ID, WellTyped<'src>>,
+    globals: HashMap<ID, WellTypedDef<'src>>,
     locals: HashMap<ID, Term<'src>>,
 }
 
 #[allow(dead_code)]
 impl<'src> Checker<'src> {
-    fn file(&mut self, f: File<'src>) -> Result<Box<[ID]>, Error<'src>> {
-        f.decls
-            .into_vec()
-            .into_iter()
-            .map(|d| self.decl(d))
-            .collect()
+    pub fn file(mut self, f: File<'src>) -> Result<WellTypedFile<'src>, Error<'src>> {
+        Ok(WellTypedFile {
+            decls: f
+                .decls
+                .into_vec()
+                .into_iter()
+                .map(|d| self.decl(d))
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .map(|name| WellTypedDecl {
+                    name,
+                    def: self.globals.remove(&name.id).unwrap(),
+                })
+                .collect(),
+        })
     }
 
-    fn decl(&mut self, decl: Decl<'src>) -> Result<ID, Error<'src>> {
+    fn decl(&mut self, decl: Decl<'src>) -> Result<Ident<'src>, Error<'src>> {
         self.locals.clear();
         let id = decl.name.id;
         match decl.def {
             Def::Fn(d) => self.fn_def(id, d)?,
             Def::Data(d) => self.data_def(id, d)?,
         }
-        Ok(id)
+        Ok(decl.name)
     }
 
     fn fn_def(&mut self, id: ID, def: FnDef<'src, Expr<'src>>) -> Result<(), Error<'src>> {
@@ -73,7 +84,7 @@ impl<'src> Checker<'src> {
         let expected = ret.clone();
         self.globals.insert(
             id,
-            WellTyped::UndefFn(FnSig {
+            WellTypedDef::UndefFn(FnSig {
                 typ_params,
                 val_params,
                 eff,
@@ -83,10 +94,11 @@ impl<'src> Checker<'src> {
 
         let body = self.check(&body, &expected)?;
         let sig = match self.globals.remove(&id).unwrap() {
-            WellTyped::UndefFn(sig) => sig,
+            WellTypedDef::UndefFn(sig) => sig,
             _ => unreachable!(),
         };
-        self.globals.insert(id, WellTyped::Fn(FnDef { sig, body }));
+        self.globals
+            .insert(id, WellTypedDef::Fn(FnDef { sig, body }));
 
         Ok(())
     }
@@ -97,29 +109,23 @@ impl<'src> Checker<'src> {
         let ctors = ctors
             .into_vec()
             .into_iter()
-            .map(|c| self.ctor(c))
+            .map(|Ctor { name, params }| {
+                let params = match params {
+                    CtorParams::None => CtorParams::None,
+                    CtorParams::Unnamed(ts) => CtorParams::Unnamed(
+                        ts.into_vec()
+                            .into_iter()
+                            .map(|t| self.check_type(&t))
+                            .collect::<Result<_, _>>()?,
+                    ),
+                    CtorParams::Named(ps) => CtorParams::Named(self.params(ps)?),
+                };
+                Ok(Ctor { name, params })
+            })
             .collect::<Result<_, _>>()?;
         self.globals
-            .insert(id, WellTyped::Data(DataDef { typ_params, ctors }));
+            .insert(id, WellTypedDef::Data(DataDef { typ_params, ctors }));
         Ok(())
-    }
-
-    fn ctor(
-        &mut self,
-        ctor: Ctor<'src, Expr<'src>>,
-    ) -> Result<Ctor<'src, Term<'src>>, Error<'src>> {
-        let Ctor { name, params } = ctor;
-        let params = match params {
-            CtorParams::None => CtorParams::None,
-            CtorParams::Unnamed(ts) => CtorParams::Unnamed(
-                ts.into_vec()
-                    .into_iter()
-                    .map(|t| self.check_type(&t))
-                    .collect::<Result<_, _>>()?,
-            ),
-            CtorParams::Named(ps) => CtorParams::Named(self.params(ps)?),
-        };
-        Ok(Ctor { name, params })
     }
 
     fn params(
@@ -162,7 +168,7 @@ impl<'src> Checker<'src> {
             Expr::F64 => Inferred::r#type(Term::F64),
             Expr::Float(v) => Inferred::pure(Term::Float(*v), Term::F64),
             Expr::FnType { .. } => todo!(),
-            Expr::Fn { .. } => todo!(),
+            Expr::Fn { .. } => unreachable!(),
             Expr::Pure => Inferred::r#type(Term::Pure),
         })
     }

@@ -1,9 +1,8 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 pub mod r#abstract;
 pub mod concrete;
 pub mod surface;
-
-use std::fmt::{Display, Formatter};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 pub type ID = u64;
 
@@ -11,12 +10,6 @@ pub type ID = u64;
 pub struct Ident<'src> {
     pub raw: &'src str,
     pub id: ID,
-}
-
-impl<'src> Display for Ident<'src> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}@{}", self.raw, self.id)
-    }
 }
 
 pub fn fresh() -> ID {
