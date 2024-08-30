@@ -6,12 +6,21 @@
 namespace mlir::dataflow {
 namespace reuse_ir {
 ChangeResult AnticipatedAllocLattice::meet(const AbstractDenseLattice &rhs) {
-  bool changed = false;
+  ChangeResult changed = ChangeResult::NoChange;
   const auto &rhsLattice = static_cast<const AnticipatedAllocLattice &>(rhs);
-  for (auto &alloc : rhsLattice.anticipatedAllocs)
-    if (anticipatedAllocs.insert(alloc).second)
-      changed = true;
-  return changed ? ChangeResult::Change : ChangeResult::NoChange;
+  for (auto &alloc : rhsLattice.anticipatedAllocs) {
+    auto iter = anticipatedAllocs.find(alloc.getFirst());
+    if (iter != anticipatedAllocs.end()) {
+      for (auto &op : alloc.getSecond())
+        changed = changed | (iter->getSecond().insert(op).second
+                                 ? ChangeResult::Change
+                                 : ChangeResult::NoChange);
+    } else {
+      anticipatedAllocs.insert(alloc);
+      changed = ChangeResult::Change;
+    }
+  }
+  return changed;
 }
 
 TokenType AnticipatedAllocAnalysis::getToken(RcType type) {
@@ -30,7 +39,7 @@ AnticipatedAllocAnalysis::visitOperation(Operation *op,
   if (auto alloc = dyn_cast<RcCreateOp>(op)) {
     if (!alloc.getToken()) {
       auto token = getToken(alloc.getType());
-      changed = before->insert(token);
+      changed = before->insert(token, op);
     }
   }
   propagateIfChanged(before, before->meet(after) | changed);
@@ -45,9 +54,13 @@ void AnticipatedAllocAnalysis::setToExitState(
     AnticipatedAllocLattice *lattice) {
   propagateIfChanged(lattice, lattice->clear());
 }
-ChangeResult AnticipatedAllocLattice::insert(TokenType token) {
-  return anticipatedAllocs.insert(token).second ? ChangeResult::Change
-                                                : ChangeResult::NoChange;
+ChangeResult AnticipatedAllocLattice::insert(TokenType token, Operation *op) {
+  auto iter = anticipatedAllocs.find(token);
+  if (iter != anticipatedAllocs.end())
+    return iter->getSecond().insert(op).second ? ChangeResult::Change
+                                               : ChangeResult::NoChange;
+  anticipatedAllocs.insert({token, {op}});
+  return ChangeResult::Change;
 }
 ChangeResult AnticipatedAllocLattice::clear() {
   auto result =

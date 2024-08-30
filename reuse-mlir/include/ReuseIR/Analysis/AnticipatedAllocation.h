@@ -14,24 +14,25 @@
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/STLExtras.h"
-#include <type_traits>
 namespace mlir::dataflow {
 namespace reuse_ir {
 using namespace mlir::reuse_ir;
 class AnticipatedAllocLattice : public AbstractDenseLattice {
-  llvm::DenseSet<TokenType> anticipatedAllocs{};
+  llvm::DenseMap<TokenType, llvm::DenseSet<Operation *>> anticipatedAllocs{};
 
 public:
   using AbstractDenseLattice::AbstractDenseLattice;
   ChangeResult meet(const AbstractDenseLattice &rhs) override final;
-  ChangeResult insert(TokenType token);
+  ChangeResult insert(TokenType token, Operation *operation);
   ChangeResult clear();
   void print(llvm::raw_ostream &os) const override final {
     os << "{";
-    llvm::interleaveComma(anticipatedAllocs, os);
+    llvm::interleaveComma(anticipatedAllocs, os,
+                          [](auto keyVal) { return keyVal.getFirst(); });
     os << "}";
   }
-  const llvm::DenseSet<TokenType> &getAnticipatedAllocs() const {
+  const llvm::DenseMap<TokenType, llvm::DenseSet<Operation *>> &
+  getAnticipatedAllocs() const {
     return anticipatedAllocs;
   }
 };
