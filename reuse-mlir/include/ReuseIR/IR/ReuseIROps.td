@@ -340,14 +340,26 @@ def UnionInspectOp : ReuseIR_Op<"union.inspect"> {
   }];
 }
 
-def PanicOp : ReuseIR_Op<"panic", [Terminator]> {
+def PanicOp : ReuseIR_Op<"panic"> {
   let summary = "Panic the program";
   let description = [{
     `reuse_ir.panic` panics the program.
   }];
   let arguments = (ins Builtin_StringAttr:$message);
+  let results = (outs Optional<AnyType>:$result);
   let assemblyFormat = [{
-    `(` $message `)` attr-dict
+    `(` $message `)` attr-dict (`:` type($result)^)?
+  }];
+}
+
+def UnreachableOp : ReuseIR_Op<"unreachable"> {
+  let summary = "Notify the program that the code path is unreachable";
+  let description = [{
+    `reuse_ir.unreachable` notifies the program that the code path is unreachable.
+  }];
+  let results = (outs Optional<AnyType>:$result);
+  let assemblyFormat = [{
+    attr-dict (`:` type($result)^)?
   }];
 }
 
@@ -434,6 +446,19 @@ def CompositeAssembleOp : ReuseIR_Op<"composite.assemble"> {
   let arguments = (ins Variadic<AnyType>:$fields);
   let assemblyFormat = [{
     `(` $fields `)` attr-dict `:` functional-type(operands, results)
+  }];
+  let hasVerifier = 1;
+}
+
+def UnionAssembleOp : ReuseIR_Op<"union.assemble"> {
+  let summary = "Create a new union object";
+  let description = [{
+    `reuse_ir.union.assemble` creates a new union object.
+  }];
+  let results = (outs Res<ReuseIR_UnionType, "Union Object">:$result);
+  let arguments = (ins Arg<I64Attr, "tag">:$tag, AnyType:$field);
+  let assemblyFormat = [{
+    `(` $tag `,` $field `)` attr-dict `:` functional-type(operands, results)
   }];
   let hasVerifier = 1;
 }

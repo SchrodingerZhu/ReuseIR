@@ -3,7 +3,8 @@
 namespace mlir {
 namespace reuse_ir {
 CompositeLayout::CompositeLayout(mlir::DataLayout layout,
-                                 llvm::ArrayRef<mlir::Type> fields)
+                                 llvm::ArrayRef<mlir::Type> fields,
+                                 std::optional<UnionBody> unionBody)
     : alignment(1), size(0, false), raw_fields{}, field_map{} {
   for (auto [index, type] : llvm::enumerate(fields)) {
     llvm::TypeSize typeSz = layout.getTypeSize(type);
@@ -18,6 +19,16 @@ CompositeLayout::CompositeLayout(mlir::DataLayout layout,
     field_map.insert(
         {index, {raw_fields.size(), alignedSize, llvm::Align{typeAlign}}});
     raw_fields.emplace_back(type);
+    size = alignedSize + typeSz;
+  }
+  if (unionBody) {
+    llvm::TypeSize typeSz = layout.getTypeSize(unionBody->dataArea);
+    size_t typeAlign = unionBody->alignment;
+    alignment = std::max(alignment, llvm::Align(typeAlign));
+    llvm::TypeSize alignedSize = llvm::alignTo(size, typeAlign);
+    if (alignedSize > size)
+      raw_fields.emplace_back(alignedSize - size);
+    raw_fields.emplace_back(unionBody->dataArea);
     size = alignedSize + typeSz;
   }
   llvm::TypeSize alignedSize = llvm::alignTo(size, alignment.value());

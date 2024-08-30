@@ -217,7 +217,7 @@ void ReuseIRDialect::registerTypes() {
   (void)generatedTypePrinter;
   (void)generatedTypeParser;
   // Register tablegen'd types.
-  addTypes<CompositeType,
+  addTypes<CompositeType, UnionType,
 #define GET_TYPEDEF_LIST
 #include "ReuseIR/IR/ReuseIROpsTypes.cpp.inc"
            >();
@@ -242,6 +242,7 @@ Type ReuseIRDialect::parseType(DialectAsmParser &parser) const {
   // Type is not tablegen'd: try to parse as a raw C++ type.
   return StringSwitch<function_ref<Type()>>(mnemonic)
       .Case("composite", [&] { return CompositeType::parse(parser); })
+      .Case("union", [&] { return UnionType::parse(parser); })
       .Default([&] {
         parser.emitError(typeLoc) << "unknown reuse_ir type: " << mnemonic;
         return Type();
@@ -256,6 +257,10 @@ void ReuseIRDialect::printType(Type type, DialectAsmPrinter &os) const {
   // Type is not tablegen'd: try printing as a raw C++ type.
   TypeSwitch<Type>(type)
       .Case<CompositeType>([&](CompositeType type) {
+        os << type.getMnemonic();
+        type.print(os);
+      })
+      .Case<UnionType>([&](UnionType type) {
         os << type.getMnemonic();
         type.print(os);
       })
@@ -337,11 +342,14 @@ CompositeLayout UnionTypeImpl::getCompositeLayout(mlir::MLIRContext *ctx,
                                                   ArrayRef<Type> innerTypes) {
   auto tagType = getTagType(ctx, innerTypes);
   auto [dataSz, dataAlign] = getDataLayout(layout, innerTypes);
-  auto cnt = dataSz.getFixedValue() / dataAlign.value();
-  auto vTy = mlir::LLVM::LLVMFixedVectorType::get(
-      mlir::IntegerType::get(ctx, 8), dataAlign.value());
-  auto dataArea = mlir::LLVM::LLVMArrayType::get(vTy, cnt);
-  return {layout, {tagType, dataArea}};
+  auto areaTy = mlir::LLVM::LLVMArrayType::get(mlir::IntegerType::get(ctx, 8),
+                                               dataSz.getFixedValue());
+  return {layout,
+          {tagType},
+          CompositeLayout::UnionBody{
+              areaTy,
+              dataAlign.value(),
+          }};
 }
 LogicalResult
 UnionTypeImpl::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,

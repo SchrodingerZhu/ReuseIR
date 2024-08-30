@@ -34,8 +34,9 @@ mlir::AliasResult AliasAnalysis::alias(mlir::Value lhs, mlir::Value rhs) {
       return mlir::AliasResult::MustAlias;
   }
 
-  // We skip possible alias for mref/nullable rc types. they are not subject to
-  // reuse analysis.
+  // We skip possible alias for mref/nullable rc types. they are not
+  // subject to reuse analysis. We also ignore possible must-alias across
+  // assembled structures.
   return AliasResult::MayAlias;
 }
 } // namespace reuse_ir

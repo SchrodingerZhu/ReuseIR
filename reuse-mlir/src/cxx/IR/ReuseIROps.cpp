@@ -206,6 +206,21 @@ mlir::reuse_ir::LogicalResult CompositeAssembleOp::verify() {
   return mlir::reuse_ir::success();
 }
 
+// UnionAssembleOp
+mlir::reuse_ir::LogicalResult UnionAssembleOp::verify() {
+  UnionType unionTy = dyn_cast<UnionType>(getType());
+  if (!unionTy)
+    return emitOpError("must return a union type");
+  if (!unionTy.isComplete())
+    return emitOpError("cannot assemble an incomplete union type");
+  if (getTag() >= unionTy.getInnerTypes().size())
+    return emitOpError("the tag must be within the range of the union type");
+  if (getOperand().getType() != unionTy.getInnerTypes()[getTag()])
+    return emitOpError("the type of the operand must match the type of the "
+                       "field in the union type corresponding to the tag");
+  return mlir::reuse_ir::success();
+}
+
 // RcCreateOp
 mlir::reuse_ir::LogicalResult RcCreateOp::verify() {
   RcType rcPtrTy = getType();
