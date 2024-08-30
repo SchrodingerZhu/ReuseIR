@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::syntax::concrete::{Decl, Def, Expr, File};
+use crate::syntax::r#abstract::convert::convert;
 use crate::syntax::r#abstract::{
     Decl as WellTypedDecl, Def as WellTypedDef, File as WellTypedFile, Term,
 };
@@ -9,7 +10,9 @@ use crate::syntax::{Ctor, CtorParams, DataDef, FnDef, FnSig, Ident, Param, ID};
 #[allow(dead_code)]
 #[derive(Debug)]
 enum Error<'src> {
-    Mismatched { want: Term<'src>, got: Term<'src> },
+    MismatchedType { want: Term<'src>, got: Term<'src> },
+    MismatchedEffect { want: Term<'src>, got: Term<'src> },
+    ExpectedFnType { typ: Term<'src> },
 }
 
 #[allow(dead_code)]
@@ -81,7 +84,8 @@ impl<'src> Checker<'src> {
         let val_params = self.params(val_params)?;
         let eff = self.check_type(&eff)?;
         let ret = self.check_type(&ret)?;
-        let expected = ret.clone();
+        let expected_eff = *eff.clone();
+        let expected_typ = *ret.clone();
         self.globals.insert(
             id,
             WellTypedDef::UndefFn(FnSig {
@@ -92,7 +96,7 @@ impl<'src> Checker<'src> {
             }),
         );
 
-        let body = self.check(&body, &expected)?;
+        let body = self.check(&body, expected_eff, expected_typ)?;
         let sig = match self.globals.remove(&id).unwrap() {
             WellTypedDef::UndefFn(sig) => sig,
             _ => unreachable!(),
@@ -109,23 +113,28 @@ impl<'src> Checker<'src> {
         let ctors = ctors
             .into_vec()
             .into_iter()
-            .map(|Ctor { name, params }| {
-                let params = match params {
-                    CtorParams::None => CtorParams::None,
-                    CtorParams::Unnamed(ts) => CtorParams::Unnamed(
-                        ts.into_vec()
-                            .into_iter()
-                            .map(|t| self.check_type(&t))
-                            .collect::<Result<_, _>>()?,
-                    ),
-                    CtorParams::Named(ps) => CtorParams::Named(self.params(ps)?),
-                };
-                Ok(Ctor { name, params })
-            })
+            .map(|c| self.ctor(c))
             .collect::<Result<_, _>>()?;
         self.globals
             .insert(id, WellTypedDef::Data(DataDef { typ_params, ctors }));
         Ok(())
+    }
+
+    fn ctor(
+        &mut self,
+        Ctor { name, params }: Ctor<'src, Expr<'src>>,
+    ) -> Result<Ctor<'src, Term<'src>>, Error<'src>> {
+        let params = match params {
+            CtorParams::None => CtorParams::None,
+            CtorParams::Unnamed(ts) => CtorParams::Unnamed(
+                ts.into_vec()
+                    .into_iter()
+                    .map(|t| self.check_type(&t))
+                    .collect::<Result<_, _>>()?,
+            ),
+            CtorParams::Named(ps) => CtorParams::Named(self.params(ps)?),
+        };
+        Ok(Ctor { name, params })
     }
 
     fn params(
@@ -137,20 +146,50 @@ impl<'src> Checker<'src> {
 
     fn param(
         &mut self,
-        p: Param<'src, Expr<'src>>,
+        Param { name, typ }: Param<'src, Expr<'src>>,
     ) -> Result<Param<'src, Term<'src>>, Error<'src>> {
-        let Param { name, typ } = p;
         let typ = self.check_type(&typ)?;
         self.locals.insert(name.id, *typ.clone());
         Ok(Param { name, typ })
     }
 
     fn check_type(&mut self, typ: &Expr<'src>) -> Result<Box<Term<'src>>, Error<'src>> {
-        self.check(typ, &Term::Type)
+        self.check(typ, Term::Pure, Term::Type)
     }
 
-    fn check(&mut self, _e: &Expr<'src>, _ty: &Term<'src>) -> Result<Box<Term<'src>>, Error<'src>> {
-        todo!()
+    fn check<'a: 'src>(
+        &mut self,
+        e: &Expr<'src>,
+        eff: Term<'src>,
+        typ: Term<'src>,
+    ) -> Result<Box<Term<'src>>, Error<'src>> {
+        match e {
+            Expr::Fn { .. } => match typ {
+                Term::FnType { .. } => todo!(),
+                typ => return Err(Error::ExpectedFnType { typ }),
+            },
+            _ => {}
+        }
+
+        let Inferred {
+            term,
+            eff: got_eff,
+            typ: got_typ,
+        } = self.infer(e)?;
+        convert(&eff, &got_eff)
+            .then_some(())
+            .ok_or(Error::MismatchedEffect {
+                want: eff,
+                got: got_eff,
+            })?;
+        convert(&typ, &got_typ)
+            .then_some(())
+            .ok_or(Error::MismatchedType {
+                want: typ,
+                got: got_typ,
+            })?;
+
+        Ok(Box::new(term))
     }
 
     fn infer(&mut self, e: &Expr<'src>) -> Result<Inferred<'src>, Error<'src>> {

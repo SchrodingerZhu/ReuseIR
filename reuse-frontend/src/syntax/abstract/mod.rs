@@ -1,5 +1,7 @@
 use crate::syntax::{DataDef, FnDef, FnSig, Ident, Param, Syntax};
 
+pub mod convert;
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct File<'src> {
