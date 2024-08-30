@@ -6,6 +6,7 @@ macro_rules! both {
     };
 }
 
+#[allow(dead_code)]
 pub fn convert<'src>(want: &'src Term<'src>, got: &'src Term<'src>) -> bool {
     use Term::*;
     match (want, got) {

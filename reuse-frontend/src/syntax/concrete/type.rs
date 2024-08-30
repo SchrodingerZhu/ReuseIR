@@ -80,8 +80,8 @@ impl<'src> Checker<'src> {
                 },
             body,
         } = def;
-        let typ_params = self.params(typ_params)?;
-        let val_params = self.params(val_params)?;
+        let typ_params = self.params(&typ_params)?;
+        let val_params = self.params(&val_params)?;
         let eff = self.check_type(&eff)?;
         let ret = self.check_type(&ret)?;
         let expected_eff = *eff.clone();
@@ -109,46 +109,41 @@ impl<'src> Checker<'src> {
 
     fn data_def(&mut self, id: ID, def: DataDef<'src, Expr<'src>>) -> Result<(), Error<'src>> {
         let DataDef { typ_params, ctors } = def;
-        let typ_params = self.params(typ_params)?;
+        let typ_params = self.params(&typ_params)?;
         let ctors = ctors
             .into_vec()
             .into_iter()
-            .map(|c| self.ctor(c))
+            .map(|Ctor { name, params }| {
+                let params = match params {
+                    CtorParams::None => CtorParams::None,
+                    CtorParams::Unnamed(ts) => CtorParams::Unnamed(
+                        ts.iter()
+                            .map(|t| self.check_type(t))
+                            .collect::<Result<_, _>>()?,
+                    ),
+                    CtorParams::Named(ps) => CtorParams::Named(self.params(&ps)?),
+                };
+                Ok(Ctor { name, params })
+            })
             .collect::<Result<_, _>>()?;
         self.globals
             .insert(id, WellTypedDef::Data(DataDef { typ_params, ctors }));
         Ok(())
     }
 
-    fn ctor(
-        &mut self,
-        Ctor { name, params }: Ctor<'src, Expr<'src>>,
-    ) -> Result<Ctor<'src, Term<'src>>, Error<'src>> {
-        let params = match params {
-            CtorParams::None => CtorParams::None,
-            CtorParams::Unnamed(ts) => CtorParams::Unnamed(
-                ts.into_vec()
-                    .into_iter()
-                    .map(|t| self.check_type(&t))
-                    .collect::<Result<_, _>>()?,
-            ),
-            CtorParams::Named(ps) => CtorParams::Named(self.params(ps)?),
-        };
-        Ok(Ctor { name, params })
-    }
-
     fn params(
         &mut self,
-        ps: Box<[Param<'src, Expr<'src>>]>,
+        ps: &[Param<'src, Expr<'src>>],
     ) -> Result<Box<[Param<'src, Term<'src>>]>, Error<'src>> {
-        ps.into_vec().into_iter().map(|p| self.param(p)).collect()
+        ps.iter().map(|p| self.param(p)).collect()
     }
 
     fn param(
         &mut self,
-        Param { name, typ }: Param<'src, Expr<'src>>,
+        Param { name, typ }: &Param<'src, Expr<'src>>,
     ) -> Result<Param<'src, Term<'src>>, Error<'src>> {
-        let typ = self.check_type(&typ)?;
+        let name = *name;
+        let typ = self.check_type(typ)?;
         self.locals.insert(name.id, *typ.clone());
         Ok(Param { name, typ })
     }
@@ -157,18 +152,51 @@ impl<'src> Checker<'src> {
         self.check(typ, Term::Pure, Term::Type)
     }
 
-    fn check<'a: 'src>(
+    fn guarded_check(
+        &mut self,
+        ctx: &[Param<'src, Term<'src>>],
+        e: &Expr<'src>,
+        eff: Term<'src>,
+        typ: Term<'src>,
+    ) -> Result<Box<Term<'src>>, Error<'src>> {
+        ctx.iter().for_each(|p| {
+            self.locals.insert(p.name.id, *p.typ.clone());
+        });
+
+        let term = self.check(e, eff, typ)?;
+
+        ctx.iter().for_each(|p| {
+            self.locals.remove(&p.name.id);
+        });
+
+        Ok(term)
+    }
+
+    fn check(
         &mut self,
         e: &Expr<'src>,
         eff: Term<'src>,
         typ: Term<'src>,
     ) -> Result<Box<Term<'src>>, Error<'src>> {
-        match e {
-            Expr::Fn { .. } => match typ {
-                Term::FnType { .. } => todo!(),
-                typ => return Err(Error::ExpectedFnType { typ }),
-            },
-            _ => {}
+        if let Expr::Fn { params, body } = e {
+            return match typ {
+                Term::FnType {
+                    param_types,
+                    eff,
+                    ret,
+                } => {
+                    let params = params.clone();
+                    let ctx = params
+                        .iter()
+                        .map(Clone::clone)
+                        .zip(param_types.into_vec())
+                        .map(|(name, typ)| Param { name, typ })
+                        .collect::<Box<_>>();
+                    let body = self.guarded_check(&ctx, body, *eff, *ret)?;
+                    Ok(Box::new(Term::Fn { params, body }))
+                }
+                typ => Err(Error::ExpectedFnType { typ }),
+            };
         }
 
         let Inferred {
@@ -206,7 +234,18 @@ impl<'src> Checker<'src> {
             Expr::F32 => Inferred::r#type(Term::F32),
             Expr::F64 => Inferred::r#type(Term::F64),
             Expr::Float(v) => Inferred::pure(Term::Float(*v), Term::F64),
-            Expr::FnType { .. } => todo!(),
+            Expr::FnType {
+                param_types,
+                eff,
+                ret,
+            } => Inferred::r#type(Term::FnType {
+                param_types: param_types
+                    .iter()
+                    .map(|t| self.check_type(t))
+                    .collect::<Result<_, _>>()?,
+                eff: self.check_type(eff)?,
+                ret: self.check_type(ret)?,
+            }),
             Expr::Fn { .. } => unreachable!(),
             Expr::Pure => Inferred::r#type(Term::Pure),
         })

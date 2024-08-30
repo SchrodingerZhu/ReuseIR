@@ -1,6 +1,7 @@
 use crate::syntax::{DataDef, FnDef, FnSig, Ident, Param, Syntax};
 
 pub mod convert;
+pub mod inline;
 
 #[allow(dead_code)]
 #[derive(Debug)]
