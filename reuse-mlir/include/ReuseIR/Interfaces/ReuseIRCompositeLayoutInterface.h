@@ -3,6 +3,7 @@
 #include "ReuseIR/Common.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Types.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -20,6 +21,10 @@ public:
     size_t byteOffset;
     llvm::Align alignment;
   };
+  struct UnionBody {
+    LLVM::LLVMArrayType dataArea;
+    size_t alignment;
+  };
 
 private:
   llvm::Align alignment = llvm::Align{1};
@@ -33,7 +38,8 @@ public:
   llvm::ArrayRef<FieldKind> getRawFields() const { return raw_fields; }
   Field getField(size_t idx) const { return field_map.at(idx); }
 
-  CompositeLayout(mlir::DataLayout layout, llvm::ArrayRef<mlir::Type> fields);
+  CompositeLayout(mlir::DataLayout layout, llvm::ArrayRef<mlir::Type> fields,
+                  std::optional<UnionBody> unionBody = std::nullopt);
 
   mlir::LLVM::LLVMStructType
   getLLVMType(const mlir::LLVMTypeConverter &converter) const;
