@@ -40,7 +40,8 @@ void TestAnticipatedAllocationPass::runOnOperation() {
     auto &allocations = lattice->getAnticipatedAllocs();
     llvm::SmallVector<Attribute> types;
     std::transform(allocations.begin(), allocations.end(),
-                   std::back_inserter(types), TypeAttr::get);
+                   std::back_inserter(types),
+                   [](auto &&pair) { return TypeAttr::get(pair.getFirst()); });
     op->setAttr("anticipated_allocation",
                 ArrayAttr::get(op->getContext(), types));
   });
