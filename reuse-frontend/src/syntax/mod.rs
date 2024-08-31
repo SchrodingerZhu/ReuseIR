@@ -1,21 +1,18 @@
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+pub mod r#abstract;
 pub mod concrete;
 pub mod surface;
 
-use std::fmt::{Display, Formatter};
-use std::sync::atomic::{AtomicU64, Ordering};
-
 pub type ID = u64;
 
-#[derive(Debug, Clone)]
+pub type NameMap<'src> = HashMap<&'src str, ID>;
+
+#[derive(Debug, Copy, Clone)]
 pub struct Ident<'src> {
     pub raw: &'src str,
     pub id: ID,
-}
-
-impl<'src> Display for Ident<'src> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}@{}", self.raw, self.id)
-    }
 }
 
 pub fn fresh() -> ID {
@@ -26,7 +23,7 @@ pub fn fresh() -> ID {
 pub trait Syntax {}
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Param<'src, T: Syntax> {
     pub name: Ident<'src>,
     pub typ: Box<T>,
@@ -34,31 +31,17 @@ pub struct Param<'src, T: Syntax> {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct File<'src, T: Syntax> {
-    pub decls: Box<[Decl<'src, T>]>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct Decl<'src, T: Syntax> {
-    pub name: Ident<'src>,
-    pub def: Def<'src, T>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub enum Def<'src, T: Syntax> {
-    Fn(FnDef<'src, T>),
-    Data(DataDef<'src, T>),
+pub struct FnSig<'src, T: Syntax> {
+    pub typ_params: Box<[Param<'src, T>]>,
+    pub val_params: Box<[Param<'src, T>]>,
+    pub eff: Box<T>,
+    pub ret: Box<T>,
 }
 
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct FnDef<'src, T: Syntax> {
-    pub typ_params: Box<[Param<'src, T>]>,
-    pub val_params: Box<[Param<'src, T>]>,
-    pub eff: Box<T>,
-    pub ret: Box<T>,
+    pub sig: FnSig<'src, T>,
     pub body: Box<T>,
 }
 

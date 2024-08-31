@@ -1,17 +1,27 @@
+use crate::syntax::{DataDef, FnDef, Ident, Syntax};
+
 mod scope;
+mod r#type;
 
-use crate::syntax::{Ctor, CtorParams, Decl, File, Ident, Param, Syntax};
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct File<'src> {
+    pub decls: Box<[Decl<'src>]>,
+}
 
 #[allow(dead_code)]
-pub type FileExpr<'src> = File<'src, Expr<'src>>;
+#[derive(Debug)]
+pub struct Decl<'src> {
+    pub name: Ident<'src>,
+    pub def: Def<'src>,
+}
+
 #[allow(dead_code)]
-pub type DeclExpr<'src> = Decl<'src, Expr<'src>>;
-#[allow(dead_code)]
-pub type ParamExpr<'src> = Param<'src, Expr<'src>>;
-#[allow(dead_code)]
-pub type CtorExpr<'src> = Ctor<'src, Expr<'src>>;
-#[allow(dead_code)]
-pub type CtorParamsExpr<'src> = CtorParams<'src, Expr<'src>>;
+#[derive(Debug)]
+pub enum Def<'src> {
+    Fn(FnDef<'src, Expr<'src>>),
+    Data(DataDef<'src, Expr<'src>>),
+}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -35,13 +45,17 @@ pub enum Expr<'src> {
     Float(f64),
 
     FnType {
-        param_types: Box<[Box<Expr<'src>>]>,
-        eff: Box<Expr<'src>>,
-        ret: Box<Expr<'src>>,
+        param_types: Box<[Box<Self>]>,
+        eff: Box<Self>,
+        ret: Box<Self>,
     },
     Fn {
         params: Box<[Ident<'src>]>,
-        body: Box<Expr<'src>>,
+        body: Box<Self>,
+    },
+    Call {
+        f: Box<Self>,
+        args: Box<[Box<Self>]>,
     },
 
     Pure,

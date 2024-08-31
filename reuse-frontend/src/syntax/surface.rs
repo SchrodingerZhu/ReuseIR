@@ -1,4 +1,3 @@
-use crate::print_parse_errors;
 use chumsky::error::Rich;
 use chumsky::extra::Err;
 use chumsky::prelude::{choice, just, none_of, one_of};
@@ -6,8 +5,9 @@ use chumsky::recursive::recursive;
 use chumsky::text::{digits, ident, inline_whitespace, int, newline, whitespace};
 use chumsky::{IterParser, Parser};
 
-use crate::syntax::concrete::{CtorExpr, CtorParamsExpr, Expr, FileExpr, ParamExpr};
-use crate::syntax::{fresh, DataDef, Decl, Def, FnDef, Ident, Param};
+use crate::print_parse_errors;
+use crate::syntax::concrete::{Decl, Def, Expr, File};
+use crate::syntax::{fresh, Ctor, CtorParams, DataDef, FnDef, FnSig, Ident, Param};
 
 pub type Msg<'src> = Rich<'src, char>;
 
@@ -22,7 +22,7 @@ macro_rules! primitive {
 }
 
 #[allow(dead_code)]
-pub fn parse(src: &str) -> FileExpr {
+pub fn parse(src: &str) -> File {
     file()
         .parse(src)
         .into_result()
@@ -30,21 +30,21 @@ pub fn parse(src: &str) -> FileExpr {
         .unwrap()
 }
 
-fn file<'src>() -> out!(FileExpr<'src>) {
+fn file<'src>() -> out!(File<'src>) {
     decl()
         .padded()
         .repeated()
         .collect::<Vec<_>>()
-        .map(|decls| FileExpr {
+        .map(|decls| File {
             decls: decls.into_boxed_slice(),
         })
 }
 
-fn decl<'src>() -> out!(Decl<'src, Expr<'src>>) {
+fn decl<'src>() -> out!(Decl<'src>) {
     fn_decl().or(data_decl())
 }
 
-fn fn_decl<'src>() -> out!(Decl<'src, Expr<'src>>) {
+fn fn_decl<'src>() -> out!(Decl<'src>) {
     just("def")
         .padded()
         .ignore_then(identifier())
@@ -68,16 +68,18 @@ fn fn_decl<'src>() -> out!(Decl<'src, Expr<'src>>) {
         .map(|((((name, typ_params), val_params), ret), body)| Decl {
             name,
             def: Def::Fn(FnDef {
-                typ_params: typ_params.unwrap_or_default(),
-                val_params,
-                eff: Box::new(Expr::Pure), // TODO: parse effects
-                ret: ret.unwrap_or_else(|| Box::new(Expr::NoneType)),
+                sig: FnSig {
+                    typ_params: typ_params.unwrap_or_default(),
+                    val_params,
+                    eff: Box::new(Expr::Pure), // TODO: parse effects
+                    ret: ret.unwrap_or_else(|| Box::new(Expr::NoneType)),
+                },
                 body,
             }),
         })
 }
 
-fn data_decl<'src>() -> out!(Decl<'src, Expr<'src>>) {
+fn data_decl<'src>() -> out!(Decl<'src>) {
     just("data")
         .padded()
         .ignore_then(identifier())
@@ -97,7 +99,7 @@ fn data_decl<'src>() -> out!(Decl<'src, Expr<'src>>) {
         })
 }
 
-fn ctors<'src>() -> out!(Box<[CtorExpr<'src>]>) {
+fn ctors<'src>() -> out!(Box<[Ctor<'src, Expr<'src>>]>) {
     ctor()
         .padded_by(inline_whitespace())
         .repeated()
@@ -106,7 +108,7 @@ fn ctors<'src>() -> out!(Box<[CtorExpr<'src>]>) {
         .map(Vec::into_boxed_slice)
 }
 
-fn ctor<'src>() -> out!(CtorExpr<'src>) {
+fn ctor<'src>() -> out!(Ctor<'src, Expr<'src>>) {
     identifier()
         .then_ignore(inline_whitespace())
         .then(
@@ -117,10 +119,10 @@ fn ctor<'src>() -> out!(CtorExpr<'src>) {
         )
         .then_ignore(inline_whitespace())
         .then_ignore(newline())
-        .map(|(name, params)| CtorExpr { name, params })
+        .map(|(name, params)| Ctor { name, params })
 }
 
-fn ctor_unnamed_params<'src>() -> out!(CtorParamsExpr<'src>) {
+fn ctor_unnamed_params<'src>() -> out!(CtorParams<'src, Expr<'src>>) {
     just('(')
         .ignore_then(whitespace())
         .ignore_then(
@@ -131,13 +133,13 @@ fn ctor_unnamed_params<'src>() -> out!(CtorParamsExpr<'src>) {
                 .at_least(1)
                 .collect::<Vec<_>>()
                 .map(Vec::into_boxed_slice)
-                .map(CtorParamsExpr::Unnamed),
+                .map(CtorParams::Unnamed),
         )
         .then_ignore(whitespace())
         .then_ignore(just(')'))
 }
 
-fn ctor_named_params<'src>() -> out!(CtorParamsExpr<'src>) {
+fn ctor_named_params<'src>() -> out!(CtorParams<'src, Expr<'src>>) {
     just('(')
         .ignore_then(whitespace())
         .ignore_then(
@@ -148,7 +150,7 @@ fn ctor_named_params<'src>() -> out!(CtorParamsExpr<'src>) {
                 .at_least(1)
                 .collect::<Vec<_>>()
                 .map(Vec::into_boxed_slice)
-                .map(CtorParamsExpr::Named),
+                .map(CtorParams::Named),
         )
         .then_ignore(whitespace())
         .then_ignore(just(')'))
@@ -168,7 +170,7 @@ fn expr<'src>() -> out!(Box<Expr<'src>>) {
             .then_ignore(whitespace())
             .then_ignore(just(':'))
             .then_ignore(whitespace())
-            .then(value)
+            .then(value.clone())
             .map(|(params, body)| Expr::Fn { params, body });
 
         lambda
@@ -177,7 +179,27 @@ fn expr<'src>() -> out!(Box<Expr<'src>>) {
             .or(primitive!("True", True))
             .or(str().map(Expr::Str))
             .or(float().map(Expr::Float))
-            .or(identifier().map(Expr::Ident))
+            .or(identifier()
+                .then(
+                    just('(')
+                        .ignore_then(whitespace())
+                        .ignore_then(
+                            value
+                                .padded()
+                                .separated_by(just(','))
+                                .collect::<Vec<_>>()
+                                .map(Vec::into_boxed_slice),
+                        )
+                        .then_ignore(whitespace())
+                        .then_ignore(just(')'))
+                        .or_not(),
+                )
+                .map(|(i, a)| {
+                    a.map_or(Expr::Ident(i), |args| Expr::Call {
+                        f: Box::new(Expr::Ident(i)),
+                        args,
+                    })
+                }))
             .map(Box::new)
             .boxed()
     })
@@ -275,7 +297,7 @@ fn type_expr<'src>() -> out!(Box<Expr<'src>>) {
     })
 }
 
-fn param<'src>() -> out!(ParamExpr<'src>) {
+fn param<'src>() -> out!(Param<'src, Expr<'src>>) {
     identifier()
         .then_ignore(whitespace())
         .then_ignore(just(':'))
@@ -284,7 +306,7 @@ fn param<'src>() -> out!(ParamExpr<'src>) {
         .map(|(name, typ)| Param { name, typ })
 }
 
-fn val_params<'src>() -> out!(Box<[ParamExpr<'src>]>) {
+fn val_params<'src>() -> out!(Box<[Param<'src, Expr<'src>>]>) {
     just('(')
         .ignore_then(whitespace())
         .ignore_then(
@@ -301,7 +323,7 @@ fn val_params<'src>() -> out!(Box<[ParamExpr<'src>]>) {
         .then_ignore(just(')'))
 }
 
-fn typ_params<'src>() -> out!(Box<[ParamExpr<'src>]>) {
+fn typ_params<'src>() -> out!(Box<[Param<'src, Expr<'src>>]>) {
     just('[')
         .ignore_then(whitespace())
         .ignore_then(
