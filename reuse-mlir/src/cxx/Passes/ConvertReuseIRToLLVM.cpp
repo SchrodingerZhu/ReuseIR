@@ -157,8 +157,8 @@ public:
       rewriter.replaceOpWithNewOp<LLVM::GEPOp>(
           op, ptrTy, layout.getLLVMType(getLLVMTypeConverter()),
           adaptor.getObject(),
-          llvm::ArrayRef<LLVM::GEPArg>{0,
-                                       layout.getField(op.getIndex()).index});
+          llvm::ArrayRef<LLVM::GEPArg>{
+              0, layout.getField(op.getIndex().getZExtValue()).index});
       return LogicalResult::success();
     }
     if (auto pointee =
@@ -174,7 +174,7 @@ public:
         return LogicalResult::failure();
       rewriter.replaceOpWithNewOp<LLVM::GEPOp>(
           op, ptrTy, ty, adaptor.getObject(),
-          llvm::ArrayRef<LLVM::GEPArg>{op.getIndex()});
+          llvm::ArrayRef<LLVM::GEPArg>{op.getIndex().getZExtValue()});
       return LogicalResult::success();
     }
     return LogicalResult::failure();

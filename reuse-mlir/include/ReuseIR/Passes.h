@@ -13,6 +13,7 @@ std::unique_ptr<Pass> createConvertReuseIRToLLVMPass();
 std::unique_ptr<Pass> createReuseIRClosureOutliningPass();
 std::unique_ptr<Pass> createReuseIRExpandControlFlowPass();
 std::unique_ptr<Pass> createReuseIRAcquireReleaseFusionPass();
+std::unique_ptr<Pass> createReuseIRInferUnionTagPass();
 
 #define GEN_PASS_CLASSES
 #define GEN_PASS_REGISTRATION

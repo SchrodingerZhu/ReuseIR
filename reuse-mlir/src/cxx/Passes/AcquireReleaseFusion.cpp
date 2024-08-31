@@ -21,6 +21,9 @@ namespace REUSE_IR_DECL_SCOPE {
 struct ReuseIRAcquireReleaseFusionPass
     : public ReuseIRAcquireReleaseFusionBase<ReuseIRAcquireReleaseFusionPass> {
   using ReuseIRAcquireReleaseFusionBase::ReuseIRAcquireReleaseFusionBase;
+  void compositeAcquireReleaseFusion(IRRewriter &rewriter);
+  void unionAcquireReleaseFusion(IRRewriter &rewriter);
+  void trivialAcquireReleaseFusion(IRRewriter &rewriter);
   void runOnOperation() override final;
 };
 
@@ -41,6 +44,14 @@ struct Release {
 };
 
 void ReuseIRAcquireReleaseFusionPass::runOnOperation() {
+  IRRewriter rewriter(&getContext());
+  compositeAcquireReleaseFusion(rewriter);
+  unionAcquireReleaseFusion(rewriter);
+  trivialAcquireReleaseFusion(rewriter);
+}
+
+void ReuseIRAcquireReleaseFusionPass::trivialAcquireReleaseFusion(
+    IRRewriter &rewriter) {
   auto func = getOperation();
 
   // get the dominance information
@@ -52,43 +63,17 @@ void ReuseIRAcquireReleaseFusionPass::runOnOperation() {
 
   // Collect operations to be considered by the pass.
   SmallVector<Release> releaseOps;
-  SmallVector<Acquire> acquireOps;
   SmallVector<RcAcquireOp> allAcquireOps;
-  DenseSet<Operation *> toErase;
   DenseSet<RcReleaseOp> toRewrite;
+  DenseSet<Operation *> toErase;
   func->walk([&](Operation *op) {
     if (auto release = dyn_cast<RcReleaseOp>(op))
       releaseOps.emplace_back(
           release, SmallVector<int64_t>(release.getFusedIndices().begin(),
                                         release.getFusedIndices().end()));
-    else if (auto acq = dyn_cast_or_null<RcAcquireOp>(op)) {
+    else if (auto acq = dyn_cast_or_null<RcAcquireOp>(op))
       allAcquireOps.push_back(acq);
-      if (auto load = dyn_cast_or_null<LoadOp>(acq.getRcPtr().getDefiningOp()))
-        if (auto proj =
-                dyn_cast_or_null<ProjOp>(load.getObject().getDefiningOp()))
-          if (auto borrow = dyn_cast_or_null<RcBorrowOp>(
-                  proj.getObject().getDefiningOp()))
-            acquireOps.push_back({acq, borrow.getObject(), proj.getIndex()});
-    }
   });
-  for (auto &release : releaseOps) {
-    auto rc = release.operation.getRcPtr();
-    for (auto acq : acquireOps) {
-      if ( // avoid repeated fusion
-          !toErase.contains(acq.operation) &&
-          // destroy the container of an acquire operation
-          aliasAnalysis.alias(rc, acq.borrowSource) == AliasResult::MustAlias &&
-          // the acquire operation dominates the release operation and the
-          // release operation post-dominates the acquire operation
-          domInfo.dominates(acq.operation, release.operation) &&
-          postDomInfo.postDominates(release.operation, acq.operation) &&
-          // skip already fused operations
-          !release.contains(acq.projIndex)) {
-        release.fusedIndices.push_back(acq.projIndex);
-        toErase.insert(acq.operation);
-      }
-    }
-  }
   // fuse trivial release after acquire
   for (auto &acq : allAcquireOps) {
     // skip already fused operations
@@ -115,15 +100,124 @@ void ReuseIRAcquireReleaseFusionPass::runOnOperation() {
       }
     }
   }
-
   // apply the changes
-  IRRewriter rewriter(&getContext());
   for (auto *op : toErase)
     rewriter.eraseOp(op);
   for (auto op : toRewrite) {
     rewriter.setInsertionPoint(op);
     rewriter.replaceOpWithNewOp<NullableNullOp>(op, op->getResultTypes());
   }
+}
+
+void ReuseIRAcquireReleaseFusionPass::compositeAcquireReleaseFusion(
+    IRRewriter &rewriter) {
+  auto func = getOperation();
+
+  // get the dominance information
+  auto &domInfo = getAnalysis<DominanceInfo>();
+  auto &postDomInfo = getAnalysis<PostDominanceInfo>();
+
+  mlir::AliasAnalysis aliasAnalysis(getOperation());
+  aliasAnalysis.addAnalysisImplementation(::mlir::reuse_ir::AliasAnalysis());
+
+  // Collect operations to be considered by the pass.
+  SmallVector<Release> releaseOps;
+  SmallVector<Acquire> acquireOps;
+  DenseSet<Operation *> toErase;
+  func->walk([&](Operation *op) {
+    if (auto release = dyn_cast<RcReleaseOp>(op))
+      releaseOps.emplace_back(
+          release, SmallVector<int64_t>(release.getFusedIndices().begin(),
+                                        release.getFusedIndices().end()));
+    else if (auto acq = dyn_cast_or_null<RcAcquireOp>(op))
+      if (auto load = dyn_cast_or_null<LoadOp>(acq.getRcPtr().getDefiningOp()))
+        if (auto proj =
+                dyn_cast_or_null<ProjOp>(load.getObject().getDefiningOp()))
+          if (auto borrow = dyn_cast_or_null<RcBorrowOp>(
+                  proj.getObject().getDefiningOp()))
+            acquireOps.push_back(
+                {acq, borrow.getObject(), proj.getIndex().getZExtValue()});
+  });
+  for (auto &release : releaseOps) {
+    auto rc = release.operation.getRcPtr();
+    for (auto acq : acquireOps) {
+      if ( // avoid repeated fusion
+          !toErase.contains(acq.operation) &&
+          // destroy the container of an acquire operation
+          aliasAnalysis.alias(rc, acq.borrowSource) == AliasResult::MustAlias &&
+          // the acquire operation dominates the release operation and the
+          // release operation post-dominates the acquire operation
+          domInfo.dominates(acq.operation, release.operation) &&
+          postDomInfo.postDominates(release.operation, acq.operation) &&
+          // skip already fused operations
+          !release.contains(acq.projIndex)) {
+        release.fusedIndices.push_back(acq.projIndex);
+        toErase.insert(acq.operation);
+      }
+    }
+  }
+
+  // apply the changes
+  for (auto *op : toErase)
+    rewriter.eraseOp(op);
+  for (auto &rel : releaseOps)
+    if (!toErase.contains(rel.operation))
+      rel.operation.setFusedIndices(rel.fusedIndices);
+}
+
+void ReuseIRAcquireReleaseFusionPass::unionAcquireReleaseFusion(
+    IRRewriter &rewriter) {
+  auto func = getOperation();
+
+  // get the dominance information
+  auto &domInfo = getAnalysis<DominanceInfo>();
+  auto &postDomInfo = getAnalysis<PostDominanceInfo>();
+
+  mlir::AliasAnalysis aliasAnalysis(getOperation());
+  aliasAnalysis.addAnalysisImplementation(::mlir::reuse_ir::AliasAnalysis());
+
+  // Collect operations to be considered by the pass.
+  SmallVector<Release> releaseOps;
+  SmallVector<Acquire> acquireOps;
+  DenseSet<Operation *> toErase;
+  func->walk([&](Operation *op) {
+    if (auto release = dyn_cast<RcReleaseOp>(op))
+      releaseOps.emplace_back(
+          release, SmallVector<int64_t>(release.getFusedIndices().begin(),
+                                        release.getFusedIndices().end()));
+    else if (auto acq = dyn_cast_or_null<RcAcquireOp>(op))
+      if (auto load = dyn_cast_or_null<LoadOp>(acq.getRcPtr().getDefiningOp()))
+        if (auto proj =
+                dyn_cast_or_null<ProjOp>(load.getObject().getDefiningOp()))
+          if (auto inspect = dyn_cast_or_null<UnionInspectOp>(
+                  proj.getObject().getDefiningOp()))
+            if (auto borrow = dyn_cast_or_null<RcBorrowOp>(
+                    inspect.getUnionRef().getDefiningOp()))
+              acquireOps.push_back(
+                  {acq, borrow.getObject(), proj.getIndex().getZExtValue()});
+  });
+  for (auto &release : releaseOps) {
+    auto rc = release.operation.getRcPtr();
+    for (auto acq : acquireOps) {
+      if ( // avoid repeated fusion
+          !toErase.contains(acq.operation) &&
+          // destroy the container of an acquire operation
+          aliasAnalysis.alias(rc, acq.borrowSource) == AliasResult::MustAlias &&
+          // the acquire operation dominates the release operation and the
+          // release operation post-dominates the acquire operation
+          domInfo.dominates(acq.operation, release.operation) &&
+          postDomInfo.postDominates(release.operation, acq.operation) &&
+          // skip already fused operations
+          !release.contains(acq.projIndex)) {
+        release.fusedIndices.push_back(acq.projIndex);
+        toErase.insert(acq.operation);
+      }
+    }
+  }
+
+  // apply the changes
+  for (auto *op : toErase)
+    rewriter.eraseOp(op);
   for (auto &rel : releaseOps)
     if (!toErase.contains(rel.operation))
       rel.operation.setFusedIndices(rel.fusedIndices);

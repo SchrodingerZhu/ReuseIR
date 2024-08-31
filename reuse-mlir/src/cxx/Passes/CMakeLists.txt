@@ -7,6 +7,7 @@ add_mlir_dialect_library(MLIRReuseIRPasses
     ClosureOutlining.cpp
     ExpandControlFlow.cpp
     AcquireReleaseFusion.cpp
+    InferUnionTag.cpp
   DEPENDS
     MLIRReuseIR
     MLIRReuseIRAnalysis
