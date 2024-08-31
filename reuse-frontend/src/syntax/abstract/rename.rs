@@ -28,6 +28,10 @@ impl Renamer {
                 params.iter_mut().for_each(|i| self.param_ident(i));
                 self.run(body);
             }
+            Call { f, args } => {
+                self.run(f);
+                args.iter_mut().for_each(|a| self.run(a));
+            }
             GenericFnType { param, body } | GenericFn { param, body } => {
                 self.param(param);
                 self.run(body);

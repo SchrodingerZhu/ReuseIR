@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::syntax::concrete::r#type::Error::ExpectedFnType;
 use crate::syntax::concrete::{Decl, Def, Expr, File};
 use crate::syntax::r#abstract::convert::convert;
 use crate::syntax::r#abstract::{
@@ -235,7 +236,46 @@ impl<'src> Checker<'src> {
                 ret: self.check_type(ret)?,
             }),
             Fn { .. } => unreachable!(),
-            Call { .. } => todo!(),
+            Call { f, args } => {
+                let Inferred { term, eff, typ } = self.infer(f)?;
+                let (arg_terms, (arg_effs, arg_types)): (Vec<_>, (Vec<_>, Vec<_>)) = args
+                    .iter()
+                    .map(|a| self.infer(a))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .map(|Inferred { term, eff, typ }| (Box::new(term), (eff, typ)))
+                    .unzip();
+                match typ {
+                    Term::FnType {
+                        param_types, ret, ..
+                    } => {
+                        param_types.into_vec().into_iter().zip(arg_types).try_fold(
+                            (),
+                            |_, (want, got)| {
+                                let want = *want;
+                                convert(&want, &got)
+                                    .then_some(())
+                                    .ok_or(Error::MismatchedType { want, got })
+                            },
+                        )?;
+                        arg_effs.into_iter().try_fold((), |_, got| {
+                            let want = eff.clone();
+                            convert(&want, &got)
+                                .then_some(())
+                                .ok_or(Error::MismatchedEffect { want, got })
+                        })?;
+                        Inferred {
+                            term: Term::Call {
+                                f: Box::new(term),
+                                args: arg_terms.into_boxed_slice(),
+                            },
+                            eff,
+                            typ: *ret,
+                        }
+                    }
+                    typ => return Err(ExpectedFnType { typ }),
+                }
+            }
             Pure => Inferred::r#type(Term::Pure),
         })
     }

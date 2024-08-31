@@ -16,49 +16,33 @@ impl<'src> Inliner<'src> {
         self
     }
 
-    pub fn term(&mut self, tm: Term<'src>) -> Term<'src> {
+    pub fn term(&mut self, tm: &mut Term<'src>) {
         use Term::*;
         match tm {
-            Ident(i) => self.env.get(&i.id).cloned().unwrap_or(Ident(i)),
-            Type => Type,
-            NoneType => NoneType,
-            None => None,
-            Boolean => Boolean,
-            False => False,
-            True => True,
-            String => String,
-            Str(s) => Str(s),
-            F32 => F32,
-            F64 => F64,
-            Float(v) => Float(v),
+            Ident(i) => {
+                if let Some(v) = self.env.get(&i.id) {
+                    *tm = v.clone();
+                }
+            }
             FnType {
                 param_types,
                 eff,
                 ret,
-            } => FnType {
-                param_types: param_types
-                    .into_vec()
-                    .into_iter()
-                    .map(|t| Box::new(self.term(*t)))
-                    .collect(),
-                eff: Box::new(self.term(*eff)),
-                ret: Box::new(self.term(*ret)),
-            },
-            Fn { params, body } => Fn {
-                params,
-                body: Box::new(self.term(*body)),
-            },
-            Pure => Pure,
-            GenericFnType { mut param, body } => {
-                param.typ = Box::new(self.term(*param.typ));
-                let body = Box::new(self.term(*body));
-                GenericFnType { param, body }
+            } => {
+                param_types.iter_mut().for_each(|t| self.term(t));
+                self.term(eff);
+                self.term(ret);
             }
-            GenericFn { mut param, body } => {
-                param.typ = Box::new(self.term(*param.typ));
-                let body = Box::new(self.term(*body));
-                GenericFn { param, body }
+            Fn { body, .. } => self.term(body),
+            Call { f, args } => {
+                self.term(f);
+                args.iter_mut().for_each(|a| self.term(a));
             }
+            GenericFnType { param, body } | GenericFn { param, body } => {
+                self.term(&mut param.typ);
+                self.term(body);
+            }
+            _ => {}
         }
     }
 }

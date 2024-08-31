@@ -140,6 +140,10 @@ pub enum Term<'src> {
         params: Box<[Ident<'src>]>,
         body: Box<Self>,
     },
+    Call {
+        f: Box<Self>,
+        args: Box<[Box<Self>]>,
+    },
 
     Pure,
 
