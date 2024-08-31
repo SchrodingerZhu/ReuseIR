@@ -335,10 +335,10 @@ def UnionInspectOp : ReuseIR_Op<"union.inspect"> {
     `reuse_ir.union.inspect` inspects the union type and returns a reference to the type of
     the given index. Such inspection is not checked in runtime.
   }];
-  let results = (outs ReuseIR_RefType:$result);
+  let results = (outs Optional<ReuseIR_RefType>:$result);
   let arguments = (ins ReuseIR_RefTypeOf<[ReuseIR_UnionType]>:$unionRef, IndexAttr:$index);
   let assemblyFormat = [{
-    $unionRef `[` $index `]` attr-dict `:` type($unionRef) `->` type($result)
+    $unionRef `[` $index `]` attr-dict `:` type($unionRef) (`->` type($result)^)?
   }];
 }
 
