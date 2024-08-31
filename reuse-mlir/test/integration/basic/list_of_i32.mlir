@@ -29,6 +29,7 @@ module @test  attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<f80, dense
             scf.yield %res : !rclist
         }
         case 1 {
+            reuse_ir.union.inspect %ref [1] : !reflist
             %x = reuse_ir.rc.release (%list : !rclist) : !nullable
             reuse_ir.token.free (%x : !nullable)
             scf.yield %acc : !rclist
