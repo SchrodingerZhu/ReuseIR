@@ -203,25 +203,26 @@ impl<'src> Checker<'src> {
     }
 
     fn infer(&mut self, e: &Expr<'src>) -> Result<Inferred<'src>, Error<'src>> {
+        use Expr::*;
         Ok(match e {
-            Expr::Ident(i) => self
+            Ident(i) => self
                 .locals
                 .get(&i.id)
                 .cloned()
                 .map(|ty| Inferred::pure(Term::Ident(*i), ty))
                 .unwrap_or_else(|| self.globals.get(&i.id).unwrap().to_inferred(*i)),
-            Expr::Type => Inferred::r#type(Term::Type),
-            Expr::NoneType => Inferred::r#type(Term::NoneType),
-            Expr::None => Inferred::pure(Term::None, Term::NoneType),
-            Expr::Boolean => Inferred::r#type(Term::Boolean),
-            Expr::False => Inferred::pure(Term::False, Term::Boolean),
-            Expr::True => Inferred::pure(Term::True, Term::Boolean),
-            Expr::String => Inferred::r#type(Term::String),
-            Expr::Str(s) => Inferred::pure(Term::Str(s), Term::String),
-            Expr::F32 => Inferred::r#type(Term::F32),
-            Expr::F64 => Inferred::r#type(Term::F64),
-            Expr::Float(v) => Inferred::pure(Term::Float(*v), Term::F64),
-            Expr::FnType {
+            Type => Inferred::r#type(Term::Type),
+            NoneType => Inferred::r#type(Term::NoneType),
+            None => Inferred::pure(Term::None, Term::NoneType),
+            Boolean => Inferred::r#type(Term::Boolean),
+            False => Inferred::pure(Term::False, Term::Boolean),
+            True => Inferred::pure(Term::True, Term::Boolean),
+            String => Inferred::r#type(Term::String),
+            Str(s) => Inferred::pure(Term::Str(s), Term::String),
+            F32 => Inferred::r#type(Term::F32),
+            F64 => Inferred::r#type(Term::F64),
+            Float(v) => Inferred::pure(Term::Float(*v), Term::F64),
+            FnType {
                 param_types,
                 eff,
                 ret,
@@ -233,8 +234,9 @@ impl<'src> Checker<'src> {
                 eff: self.check_type(eff)?,
                 ret: self.check_type(ret)?,
             }),
-            Expr::Fn { .. } => unreachable!(),
-            Expr::Pure => Inferred::r#type(Term::Pure),
+            Fn { .. } => unreachable!(),
+            Call { .. } => todo!(),
+            Pure => Inferred::r#type(Term::Pure),
         })
     }
 }

@@ -170,7 +170,7 @@ fn expr<'src>() -> out!(Box<Expr<'src>>) {
             .then_ignore(whitespace())
             .then_ignore(just(':'))
             .then_ignore(whitespace())
-            .then(value)
+            .then(value.clone())
             .map(|(params, body)| Expr::Fn { params, body });
 
         lambda
@@ -179,7 +179,27 @@ fn expr<'src>() -> out!(Box<Expr<'src>>) {
             .or(primitive!("True", True))
             .or(str().map(Expr::Str))
             .or(float().map(Expr::Float))
-            .or(identifier().map(Expr::Ident))
+            .or(identifier()
+                .then(
+                    just('(')
+                        .ignore_then(whitespace())
+                        .ignore_then(
+                            value
+                                .padded()
+                                .separated_by(just(','))
+                                .collect::<Vec<_>>()
+                                .map(Vec::into_boxed_slice),
+                        )
+                        .then_ignore(whitespace())
+                        .then_ignore(just(')'))
+                        .or_not(),
+                )
+                .map(|(i, a)| {
+                    a.map_or(Expr::Ident(i), |args| Expr::Call {
+                        f: Box::new(Expr::Ident(i)),
+                        args,
+                    })
+                }))
             .map(Box::new)
             .boxed()
     })

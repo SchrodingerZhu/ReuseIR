@@ -45,13 +45,17 @@ pub enum Expr<'src> {
     Float(f64),
 
     FnType {
-        param_types: Box<[Box<Expr<'src>>]>,
-        eff: Box<Expr<'src>>,
-        ret: Box<Expr<'src>>,
+        param_types: Box<[Box<Self>]>,
+        eff: Box<Self>,
+        ret: Box<Self>,
     },
     Fn {
         params: Box<[Ident<'src>]>,
-        body: Box<Expr<'src>>,
+        body: Box<Self>,
+    },
+    Call {
+        f: Box<Self>,
+        args: Box<[Box<Self>]>,
     },
 
     Pure,

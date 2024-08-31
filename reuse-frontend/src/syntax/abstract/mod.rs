@@ -132,24 +132,24 @@ pub enum Term<'src> {
     Float(f64),
 
     FnType {
-        param_types: Box<[Box<Term<'src>>]>,
-        eff: Box<Term<'src>>,
-        ret: Box<Term<'src>>,
+        param_types: Box<[Box<Self>]>,
+        eff: Box<Self>,
+        ret: Box<Self>,
     },
     Fn {
         params: Box<[Ident<'src>]>,
-        body: Box<Term<'src>>,
+        body: Box<Self>,
     },
 
     Pure,
 
     GenericFnType {
         param: Param<'src, Term<'src>>,
-        body: Box<Term<'src>>,
+        body: Box<Self>,
     },
     GenericFn {
         param: Param<'src, Term<'src>>,
-        body: Box<Term<'src>>,
+        body: Box<Self>,
     },
 }
 

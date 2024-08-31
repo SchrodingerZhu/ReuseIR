@@ -65,10 +65,11 @@ impl<'src> Checker<'src> {
 
     #[allow(dead_code)]
     fn expr(&mut self, expr: &mut Expr<'src>) -> Result<(), Error<'src>> {
+        use Expr::*;
         match expr {
-            Expr::Ident(i) => self.ident(i),
+            Ident(i) => self.ident(i),
 
-            Expr::FnType {
+            FnType {
                 param_types,
                 eff,
                 ret,
@@ -77,20 +78,14 @@ impl<'src> Checker<'src> {
                 self.expr(eff)?;
                 self.expr(ret)
             }
-            Expr::Fn { params, body } => self.guarded(params, body),
+            Fn { params, body } => self.guarded(params, body),
+            Call { f, args } => {
+                self.expr(f)?;
+                args.iter_mut().try_fold((), |_, a| self.expr(a))
+            }
 
-            Expr::Type
-            | Expr::NoneType
-            | Expr::None
-            | Expr::Boolean
-            | Expr::False
-            | Expr::True
-            | Expr::String
-            | Expr::Str(..)
-            | Expr::F32
-            | Expr::F64
-            | Expr::Float(..)
-            | Expr::Pure => Ok(()),
+            Type | NoneType | None | Boolean | False | True | String | Str(..) | F32 | F64
+            | Float(..) | Pure => Ok(()),
         }
     }
 
@@ -170,7 +165,7 @@ mod tests {
         check(
             "
 def f0(): None
-def f1(): f0
+def f1(): f0()
         ",
         );
     }
