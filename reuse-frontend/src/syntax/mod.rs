@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub mod r#abstract;
@@ -5,6 +6,8 @@ pub mod concrete;
 pub mod surface;
 
 pub type ID = u64;
+
+pub type NameMap<'src> = HashMap<&'src str, ID>;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Ident<'src> {

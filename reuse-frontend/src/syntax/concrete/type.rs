@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::syntax::concrete::{Decl, Def, Expr, File};
 use crate::syntax::r#abstract::convert::convert;
 use crate::syntax::r#abstract::{
-    Decl as WellTypedDecl, Def as WellTypedDef, File as WellTypedFile, Term,
+    Decl as WellTypedDecl, Def as WellTypedDef, File as WellTypedFile, Inferred, Term,
 };
 use crate::syntax::{Ctor, CtorParams, DataDef, FnDef, FnSig, Ident, Param, ID};
 
@@ -13,24 +13,6 @@ enum Error<'src> {
     MismatchedType { want: Term<'src>, got: Term<'src> },
     MismatchedEffect { want: Term<'src>, got: Term<'src> },
     ExpectedFnType { typ: Term<'src> },
-}
-
-#[allow(dead_code)]
-struct Inferred<'src> {
-    term: Term<'src>,
-    eff: Term<'src>,
-    typ: Term<'src>,
-}
-
-impl<'src> Inferred<'src> {
-    fn pure(term: Term<'src>, typ: Term<'src>) -> Self {
-        let eff = Term::Pure;
-        Self { term, eff, typ }
-    }
-
-    fn r#type(typ: Term<'src>) -> Self {
-        Self::pure(typ, Term::Type)
-    }
 }
 
 #[allow(dead_code)]
@@ -222,7 +204,12 @@ impl<'src> Checker<'src> {
 
     fn infer(&mut self, e: &Expr<'src>) -> Result<Inferred<'src>, Error<'src>> {
         Ok(match e {
-            Expr::Ident(_) => todo!(),
+            Expr::Ident(i) => self
+                .locals
+                .get(&i.id)
+                .cloned()
+                .map(|ty| Inferred::pure(Term::Ident(*i), ty))
+                .unwrap_or_else(|| self.globals.get(&i.id).unwrap().to_inferred(*i)),
             Expr::Type => Inferred::r#type(Term::Type),
             Expr::NoneType => Inferred::r#type(Term::NoneType),
             Expr::None => Inferred::pure(Term::None, Term::NoneType),

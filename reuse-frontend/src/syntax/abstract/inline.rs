@@ -48,6 +48,7 @@ impl<'src> Inliner<'src> {
                 params,
                 body: Box::new(self.term(*body)),
             },
+            Pure => Pure,
             GenericFnType { mut param, body } => {
                 param.typ = Box::new(self.term(*param.typ));
                 let body = Box::new(self.term(*body));
@@ -58,7 +59,6 @@ impl<'src> Inliner<'src> {
                 let body = Box::new(self.term(*body));
                 GenericFn { param, body }
             }
-            Pure => Pure,
         }
     }
 }

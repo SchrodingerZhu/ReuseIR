@@ -24,9 +24,9 @@ pub fn convert<'src>(want: &'src Term<'src>, got: &'src Term<'src>) -> bool {
         (Float(a), Float(b)) => a == b,
         (FnType { .. }, FnType { .. }) => todo!(),
         (Fn { .. }, Fn { .. }) => todo!(),
+        both!(Pure) => true,
         (GenericFnType { .. }, GenericFnType { .. }) => todo!(),
         (GenericFn { .. }, GenericFn { .. }) => todo!(),
-        both!(Pure) => true,
 
         _ => false,
     }

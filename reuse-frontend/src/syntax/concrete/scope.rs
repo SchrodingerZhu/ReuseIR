@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use crate::syntax::concrete::{Decl, Def, Expr, File};
-use crate::syntax::{CtorParams, DataDef, FnDef, FnSig, Ident, Param, ID};
+use crate::syntax::{CtorParams, DataDef, FnDef, FnSig, Ident, NameMap, Param, ID};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -9,8 +7,6 @@ enum Error<'src> {
     DuplicateName(&'src str),
     UnresolvedIdent(&'src str),
 }
-
-type NameMap<'src> = HashMap<&'src str, ID>;
 
 #[allow(dead_code)]
 #[derive(Default)]
