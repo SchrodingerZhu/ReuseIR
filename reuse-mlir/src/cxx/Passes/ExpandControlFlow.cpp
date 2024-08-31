@@ -81,7 +81,8 @@ public:
           auto refTy = RefType::get(getContext(), rcTy.getPointee(),
                                     rcTy.getFreezingKind());
           auto borrowed = builder.create<RcBorrowOp>(loc, refTy, op.getRcPtr());
-          builder.create<DestroyOp>(loc, borrowed, op.getFusedIndices());
+          builder.create<DestroyOp>(loc, borrowed, op.getTagAttr(),
+                                    op.getFusedIndices());
           auto resTy = cast<NullableType>(op.getResultTypes()[0]);
           auto token = builder.create<RcTokenizeOp>(loc, resTy.getPointer(),
                                                     op.getRcPtr());

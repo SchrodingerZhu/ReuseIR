@@ -45,7 +45,7 @@ class ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
           mlir::Value ref = rewriter.create<ProjOp>(
               op->getLoc(),
               RefType::get(getContext(), innerArg.getType(), nonfreezing), arg,
-              innerArg.getArgNumber());
+              rewriter.getIndexAttr(innerArg.getArgNumber()));
           mlir::Value loaded =
               rewriter.create<LoadOp>(op->getLoc(), innerArg.getType(), ref);
           return loaded;

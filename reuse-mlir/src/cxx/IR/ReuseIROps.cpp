@@ -56,11 +56,12 @@ mlir::reuse_ir::LogicalResult ProjOp::verify() {
       llvm::TypeSwitch<mlir::Type, mlir::Type>(input.getPointee())
           .Case<CompositeType>([&](const CompositeType &ty) {
             size_t size = ty.getInnerTypes().size();
-            return getIndex() < size ? ty.getInnerTypes()[getIndex()]
-                                     : mlir::Type{};
+            return getIndex().getZExtValue() < size
+                       ? ty.getInnerTypes()[getIndex().getZExtValue()]
+                       : mlir::Type{};
           })
           .Case<ArrayType>([&](const ArrayType &ty) {
-            if (getIndex() >= ty.getSizes()[0])
+            if (getIndex().getZExtValue() >= ty.getSizes()[0])
               return mlir::Type{};
             if (ty.getSizes().size() == 1)
               return ty.getElementType();
@@ -213,9 +214,10 @@ mlir::reuse_ir::LogicalResult UnionAssembleOp::verify() {
     return emitOpError("must return a union type");
   if (!unionTy.isComplete())
     return emitOpError("cannot assemble an incomplete union type");
-  if (getTag() >= unionTy.getInnerTypes().size())
+  if (getTag().getZExtValue() >= unionTy.getInnerTypes().size())
     return emitOpError("the tag must be within the range of the union type");
-  if (getOperand().getType() != unionTy.getInnerTypes()[getTag()])
+  if (getOperand().getType() !=
+      unionTy.getInnerTypes()[getTag().getZExtValue()])
     return emitOpError("the type of the operand must match the type of the "
                        "field in the union type corresponding to the tag");
   return mlir::reuse_ir::success();

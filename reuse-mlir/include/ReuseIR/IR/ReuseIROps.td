@@ -189,11 +189,12 @@ def RcReleaseOp : ReuseIR_Op<"rc.release"> {
 
   let arguments = (ins 
     Arg<ReuseIR_RcType, "target rc pointer", [MemReadAt<0>, MemWriteAt<1>]>:$rcPtr,
+    OptionalAttr<IndexAttr>:$tag,
     DenseI64ArrayAttr:$fusedIndices
   );
   let results = (outs Res<Optional<ReuseIR_NullableToken>, "token">:$token);
   let assemblyFormat = [{
-    `(` $rcPtr `:` type($rcPtr) `)` custom<FusedIndices>($fusedIndices) attr-dict  (`:` type($token)^)?
+    `(` $rcPtr `:` type($rcPtr) `)` (`tag` `(` $tag^ `)`)?  custom<FusedIndices>($fusedIndices) attr-dict  (`:` type($token)^)?
   }];
 
   let hasVerifier = 1;
@@ -261,7 +262,7 @@ def ProjOp : ReuseIR_Op<"proj"> {
   let results = (outs ReuseIR_RefType:$result);
   let arguments = (
     ins Arg<ReuseIR_RefType, "reference to the object", []>:$object,
-    I64Attr:$index
+    IndexAttr:$index
   );
 
   let assemblyFormat = [{
@@ -304,11 +305,12 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
   // TODO: Add type restrictions
   let arguments = (ins 
     Arg<ReuseIR_RefType, "destroyable object", [MemRead]>:$object,
+    OptionalAttr<IndexAttr>:$tag,
     DenseI64ArrayAttr:$fusedIndices
   );
 
   let assemblyFormat = [{
-    `(` $object `:` type($object) `)` custom<FusedIndices>($fusedIndices) attr-dict
+    `(` $object `:` type($object) `)` (`tag` `(` $tag^ `)`)? custom<FusedIndices>($fusedIndices) attr-dict
   }];
   
   // TODO: add verifier
@@ -456,7 +458,7 @@ def UnionAssembleOp : ReuseIR_Op<"union.assemble"> {
     `reuse_ir.union.assemble` creates a new union object.
   }];
   let results = (outs Res<ReuseIR_UnionType, "Union Object">:$result);
-  let arguments = (ins Arg<I64Attr, "tag">:$tag, AnyType:$field);
+  let arguments = (ins Arg<IndexAttr, "tag">:$tag, AnyType:$field);
   let assemblyFormat = [{
     `(` $tag `,` $field `)` attr-dict `:` functional-type(operands, results)
   }];

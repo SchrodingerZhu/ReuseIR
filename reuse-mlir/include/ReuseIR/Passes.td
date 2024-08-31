@@ -45,4 +45,13 @@ def ReuseIRAcquireReleaseFusion : Pass<"reuse-ir-acquire-release-fusion", "::mli
   let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
 }
 
+def ReuseIRInferUnionTag : Pass<"reuse-ir-infer-union-tag", "::mlir::func::FuncOp"> {
+  let summary = "Infer union tags for ReuseIR operations";
+  let description = [{
+    This pass is used to infer union tags for ReuseIR operations.
+  }];
+  let constructor = "::mlir::reuse_ir::createReuseIRInferUnionTagPass()";
+  let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
+}
+
 #endif // REUSE_IR_PASSES
