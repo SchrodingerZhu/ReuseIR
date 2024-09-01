@@ -236,9 +236,14 @@ impl<'src> Checker<'src> {
                 ret: self.check_type(ret)?,
             }),
             Fn { .. } => unreachable!(),
-            Call { f, args } => {
+            Call {
+                f,
+                typ_args,
+                val_args,
+            } => {
+                let _ = typ_args; // TODO
                 let Inferred { term, eff, typ } = self.infer(f)?;
-                let (arg_terms, (arg_effs, arg_types)): (Vec<_>, (Vec<_>, Vec<_>)) = args
+                let (arg_terms, (arg_effs, arg_types)): (Vec<_>, (Vec<_>, Vec<_>)) = val_args
                     .iter()
                     .map(|a| self.infer(a))
                     .collect::<Result<Vec<_>, _>>()?

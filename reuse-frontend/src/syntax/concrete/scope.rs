@@ -79,9 +79,14 @@ impl<'src> Checker<'src> {
                 self.expr(ret)
             }
             Fn { params, body } => self.guarded(params, body),
-            Call { f, args } => {
+            Call {
+                f,
+                typ_args,
+                val_args,
+            } => {
                 self.expr(f)?;
-                args.iter_mut().try_fold((), |_, a| self.expr(a))
+                typ_args.iter_mut().try_fold((), |_, a| self.expr(a))?;
+                val_args.iter_mut().try_fold((), |_, a| self.expr(a))
             }
 
             Type | NoneType | None | Boolean | False | True | String | Str(..) | F32 | F64

@@ -55,7 +55,8 @@ pub enum Expr<'src> {
     },
     Call {
         f: Box<Self>,
-        args: Box<[Box<Self>]>,
+        typ_args: Box<[Box<Self>]>,
+        val_args: Box<[Box<Self>]>,
     },
 
     Pure,

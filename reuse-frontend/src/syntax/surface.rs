@@ -181,23 +181,40 @@ fn expr<'src>() -> out!(Box<Expr<'src>>) {
             .or(float().map(Expr::Float))
             .or(identifier()
                 .then(
-                    just('(')
+                    just('[')
                         .ignore_then(whitespace())
                         .ignore_then(
-                            value
+                            type_expr()
                                 .padded()
                                 .separated_by(just(','))
+                                .at_least(1)
                                 .collect::<Vec<_>>()
                                 .map(Vec::into_boxed_slice),
                         )
                         .then_ignore(whitespace())
-                        .then_ignore(just(')'))
+                        .then_ignore(just(']'))
+                        .or_not()
+                        .map(Option::unwrap_or_default)
+                        .then(
+                            just('(')
+                                .ignore_then(whitespace())
+                                .ignore_then(
+                                    value
+                                        .padded()
+                                        .separated_by(just(','))
+                                        .collect::<Vec<_>>()
+                                        .map(Vec::into_boxed_slice),
+                                )
+                                .then_ignore(whitespace())
+                                .then_ignore(just(')')),
+                        )
                         .or_not(),
                 )
                 .map(|(i, a)| {
-                    a.map_or(Expr::Ident(i), |args| Expr::Call {
+                    a.map_or(Expr::Ident(i), |(typ_args, val_args)| Expr::Call {
                         f: Box::new(Expr::Ident(i)),
-                        args,
+                        typ_args,
+                        val_args,
                     })
                 }))
             .map(Box::new)
@@ -373,6 +390,9 @@ def f4() -> [] -> bool:
         :
             True
 def f5() -> [bool, str] -> bool: lambda a, b: False
+
+def f6[T](): None
+def f7(): f6[str]()
 
 data
   Foo [T]:
