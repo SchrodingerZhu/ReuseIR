@@ -304,7 +304,7 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
 
   // TODO: Add type restrictions
   let arguments = (ins 
-    Arg<ReuseIR_RefType, "destroyable object", [MemRead]>:$object,
+    Arg<ReuseIR_RefType, "destroyable object", [MemRead, MemFree<DefaultResource>]>:$object,
     OptionalAttr<IndexAttr>:$tag,
     DenseI64ArrayAttr:$fusedIndices
   );

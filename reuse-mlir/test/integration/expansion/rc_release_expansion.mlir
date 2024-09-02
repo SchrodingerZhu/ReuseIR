@@ -8,7 +8,6 @@ module @test attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<f80, dense<
 // CHECK:    %[[reg0:[a-z0-9]+]] = reuse_ir.rc.decrease(%[[regarg0]] : <i64, nonatomic, nonfreezing>) : i1
 // CHECK:    %[[reg1:[a-z0-9]+]] = scf.if %[[reg0]] -> (!reuse_ir.nullable<!reuse_ir.token<size : 16, alignment : 8>>) {
 // CHECK:      %[[reg2:[a-z0-9]+]] = reuse_ir.rc.borrow %[[regarg0]] : <i64, nonatomic, nonfreezing> -> <i64, nonfreezing>
-// CHECK:      reuse_ir.destroy(%[[reg2]] : <i64, nonfreezing>)
 // CHECK:      %[[reg3:[a-z0-9]+]] = reuse_ir.rc.tokenize %[[regarg0]] : <i64, nonatomic, nonfreezing> -> <size : 16, alignment : 8>
 // CHECK:      %[[reg4:[a-z0-9]+]] = reuse_ir.nullable.nonnull(%[[reg3]] : !reuse_ir.token<size : 16, alignment : 8>) : <!reuse_ir.token<size : 16, alignment : 8>>
 // CHECK:      scf.yield %[[reg4]] : !reuse_ir.nullable<!reuse_ir.token<size : 16, alignment : 8>>
