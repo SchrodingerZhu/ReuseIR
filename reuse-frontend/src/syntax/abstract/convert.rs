@@ -22,7 +22,25 @@ pub fn convert<'src>(want: &'src Term<'src>, got: &'src Term<'src>) -> bool {
         both!(F32) => true,
         both!(F64) => true,
         both!(Float(..)) => unreachable!(),
-        (FnType { .. }, FnType { .. }) => todo!(),
+        (
+            FnType {
+                param_types: param_types_lhs,
+                eff: eff_lhs,
+                ret: ret_lhs,
+            },
+            FnType {
+                param_types: param_types_rhs,
+                eff: eff_rhs,
+                ret: ret_rhs,
+            },
+        ) => {
+            param_types_lhs
+                .iter()
+                .zip(param_types_rhs)
+                .all(|(l, r)| convert(l, r))
+                && convert(eff_lhs, eff_rhs)
+                && convert(ret_lhs, ret_rhs)
+        }
         both!(Fn { .. }) => unreachable!(),
         both!(Call { .. }) => unreachable!(),
         both!(Pure) => true,
