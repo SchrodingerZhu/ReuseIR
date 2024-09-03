@@ -1,5 +1,5 @@
 use crate::syntax::r#abstract::rename::rename;
-use crate::syntax::{DataDef, FnDef, FnSig, Ident, Param, Syntax};
+use crate::syntax::{DataDef, FnDef, FnSig, Ident, Param, Primitive, PrimitiveType, Syntax};
 
 pub mod convert;
 pub mod inline;
@@ -14,12 +14,12 @@ pub struct Inferred<'src> {
 
 impl<'src> Inferred<'src> {
     pub fn pure(term: Term<'src>, typ: Term<'src>) -> Self {
-        let eff = Term::Pure;
+        let eff = Term::from(PrimitiveType::Pure);
         Self { term, eff, typ }
     }
 
     pub fn r#type(typ: Term<'src>) -> Self {
-        Self::pure(typ, Term::Type)
+        Self::pure(typ, Term::from(PrimitiveType::Type))
     }
 }
 
@@ -113,23 +113,10 @@ impl<'src> From<&FnSig<'src, Term<'src>>> for Term<'src> {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Term<'src> {
+    PrimitiveType(PrimitiveType),
+    Primitive(Primitive<'src>),
+
     Ident(Ident<'src>),
-
-    Type,
-
-    NoneType,
-    None,
-
-    Boolean,
-    False,
-    True,
-
-    String,
-    Str(&'src str),
-
-    F32,
-    F64,
-    Float(f64),
 
     FnType {
         param_types: Box<[Box<Self>]>,
@@ -145,8 +132,6 @@ pub enum Term<'src> {
         args: Box<[Box<Self>]>,
     },
 
-    Pure,
-
     GenericFnType {
         param: Param<'src, Term<'src>>,
         body: Box<Self>,
@@ -157,4 +142,16 @@ pub enum Term<'src> {
     },
 }
 
-impl<'src> Syntax for Term<'src> {}
+impl<'src> From<Primitive<'src>> for Term<'src> {
+    fn from(v: Primitive<'src>) -> Self {
+        Self::Primitive(v)
+    }
+}
+
+impl<'src> From<PrimitiveType> for Term<'src> {
+    fn from(t: PrimitiveType) -> Self {
+        Self::PrimitiveType(t)
+    }
+}
+
+impl<'src> Syntax<'src> for Term<'src> {}

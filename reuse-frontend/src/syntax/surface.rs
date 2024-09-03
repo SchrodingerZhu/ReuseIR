@@ -7,7 +7,9 @@ use chumsky::{IterParser, Parser};
 
 use crate::print_parse_errors;
 use crate::syntax::concrete::{Decl, Def, Expr, File};
-use crate::syntax::{fresh, Ctor, CtorParams, DataDef, FnDef, FnSig, Ident, Param};
+use crate::syntax::{
+    fresh, Ctor, CtorParams, DataDef, FnDef, FnSig, Ident, Param, Primitive, PrimitiveType,
+};
 
 pub type Msg<'src> = Rich<'src, char>;
 
@@ -15,9 +17,15 @@ macro_rules! out {
     ($o:ty) => { impl Parser<'src, &'src str, $o, Err<Msg<'src>>> };
 }
 
+macro_rules! primitive_type {
+    ($kw:literal, $e:ident) => {
+        just($kw).map(|_| Expr::from(PrimitiveType::$e))
+    };
+}
+
 macro_rules! primitive {
     ($kw:literal, $e:ident) => {
-        just($kw).map(|_| Expr::$e)
+        just($kw).map(|_| Expr::from(Primitive::$e))
     };
 }
 
@@ -71,8 +79,8 @@ fn fn_decl<'src>() -> out!(Decl<'src>) {
                 sig: FnSig {
                     typ_params: typ_params.unwrap_or_default(),
                     val_params,
-                    eff: Box::new(Expr::Pure), // TODO: parse effects
-                    ret: ret.unwrap_or_else(|| Box::new(Expr::NoneType)),
+                    eff: Box::new(Expr::PrimitiveType(PrimitiveType::Pure)), // TODO: parse effects
+                    ret: ret.unwrap_or(Box::new(Expr::PrimitiveType(PrimitiveType::None))),
                 },
                 body,
             }),
@@ -177,8 +185,8 @@ fn expr<'src>() -> out!(Box<Expr<'src>>) {
             .or(primitive!("None", None))
             .or(primitive!("False", True))
             .or(primitive!("True", True))
-            .or(str().map(Expr::Str))
-            .or(float().map(Expr::Float))
+            .or(str().map(Primitive::Str).map(Expr::Primitive))
+            .or(float().map(Primitive::Float).map(Expr::Primitive))
             .or(identifier()
                 .then(
                     just('[')
@@ -298,17 +306,17 @@ fn type_expr<'src>() -> out!(Box<Expr<'src>>) {
             .map(|(param_types, ret)| {
                 Expr::FnType {
                     param_types,
-                    eff: Box::new(Expr::Pure), // TODO: parse effects
+                    eff: Box::new(Expr::PrimitiveType(PrimitiveType::Pure)), // TODO: parse effects
                     ret,
                 }
             });
 
         fn_type
-            .or(primitive!("bool", Boolean))
-            .or(primitive!("str", String))
-            .or(primitive!("None", NoneType))
-            .or(primitive!("f32", F32))
-            .or(primitive!("f64", F64))
+            .or(primitive_type!("bool", Bool))
+            .or(primitive_type!("str", Str))
+            .or(primitive_type!("None", None))
+            .or(primitive_type!("f32", F32))
+            .or(primitive_type!("f64", F64))
             .or(identifier().map(Expr::Ident))
             .map(Box::new)
             .boxed()
@@ -347,10 +355,7 @@ fn typ_params<'src>() -> out!(Box<[Param<'src, Expr<'src>>]>) {
         .ignore_then(
             identifier()
                 .padded()
-                .map(|name| Param {
-                    name,
-                    typ: Box::new(Expr::Type),
-                })
+                .map(Param::type_param)
                 .separated_by(just(','))
                 .allow_trailing()
                 .at_least(1)

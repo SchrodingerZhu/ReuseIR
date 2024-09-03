@@ -6,7 +6,7 @@ use crate::syntax::r#abstract::convert::convert;
 use crate::syntax::r#abstract::{
     Decl as WellTypedDecl, Def as WellTypedDef, File as WellTypedFile, Inferred, Term,
 };
-use crate::syntax::{Ctor, CtorParams, DataDef, FnDef, FnSig, Ident, Param, ID};
+use crate::syntax::{Ctor, CtorParams, DataDef, FnDef, FnSig, Ident, Param, PrimitiveType, ID};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -132,7 +132,11 @@ impl<'src> Checker<'src> {
     }
 
     fn check_type(&mut self, typ: &Expr<'src>) -> Result<Box<Term<'src>>, Error<'src>> {
-        self.check(typ, Term::Pure, Term::Type)
+        self.check(
+            typ,
+            Term::from(PrimitiveType::Pure),
+            Term::from(PrimitiveType::Type),
+        )
     }
 
     fn guarded_check(
@@ -204,26 +208,18 @@ impl<'src> Checker<'src> {
     }
 
     fn infer(&mut self, e: &Expr<'src>) -> Result<Inferred<'src>, Error<'src>> {
-        use Expr::*;
         Ok(match e {
-            Ident(i) => self
+            Expr::Primitive(v) => {
+                Inferred::pure(Term::from(*v), Term::from(PrimitiveType::from(*v)))
+            }
+            Expr::PrimitiveType(t) => Inferred::r#type(Term::from(*t)),
+            Expr::Ident(i) => self
                 .locals
                 .get(&i.id)
                 .cloned()
                 .map(|ty| Inferred::pure(Term::Ident(*i), ty))
                 .unwrap_or_else(|| self.globals.get(&i.id).unwrap().to_inferred(*i)),
-            Type => Inferred::r#type(Term::Type),
-            NoneType => Inferred::r#type(Term::NoneType),
-            None => Inferred::pure(Term::None, Term::NoneType),
-            Boolean => Inferred::r#type(Term::Boolean),
-            False => Inferred::pure(Term::False, Term::Boolean),
-            True => Inferred::pure(Term::True, Term::Boolean),
-            String => Inferred::r#type(Term::String),
-            Str(s) => Inferred::pure(Term::Str(s), Term::String),
-            F32 => Inferred::r#type(Term::F32),
-            F64 => Inferred::r#type(Term::F64),
-            Float(v) => Inferred::pure(Term::Float(*v), Term::F64),
-            FnType {
+            Expr::FnType {
                 param_types,
                 eff,
                 ret,
@@ -235,8 +231,8 @@ impl<'src> Checker<'src> {
                 eff: self.check_type(eff)?,
                 ret: self.check_type(ret)?,
             }),
-            Fn { .. } => unreachable!(),
-            Call {
+            Expr::Fn { .. } => unreachable!(),
+            Expr::Call {
                 f,
                 typ_args,
                 val_args,
@@ -281,7 +277,6 @@ impl<'src> Checker<'src> {
                     typ => return Err(ExpectedFnType { typ }),
                 }
             }
-            Pure => Inferred::r#type(Term::Pure),
         })
     }
 }

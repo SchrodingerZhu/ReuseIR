@@ -67,8 +67,8 @@ impl<'src> Checker<'src> {
     fn expr(&mut self, expr: &mut Expr<'src>) -> Result<(), Error<'src>> {
         use Expr::*;
         match expr {
+            PrimitiveType(..) | Primitive(..) => Ok(()),
             Ident(i) => self.ident(i),
-
             FnType {
                 param_types,
                 eff,
@@ -88,9 +88,6 @@ impl<'src> Checker<'src> {
                 typ_args.iter_mut().try_fold((), |_, a| self.expr(a))?;
                 val_args.iter_mut().try_fold((), |_, a| self.expr(a))
             }
-
-            Type | NoneType | None | Boolean | False | True | String | Str(..) | F32 | F64
-            | Float(..) | Pure => Ok(()),
         }
     }
 

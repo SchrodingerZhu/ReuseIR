@@ -1,4 +1,4 @@
-use crate::syntax::{DataDef, FnDef, Ident, Syntax};
+use crate::syntax::{DataDef, FnDef, Ident, Primitive, PrimitiveType, Syntax};
 
 mod scope;
 mod r#type;
@@ -26,23 +26,10 @@ pub enum Def<'src> {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Expr<'src> {
+    PrimitiveType(PrimitiveType),
+    Primitive(Primitive<'src>),
+
     Ident(Ident<'src>),
-
-    Type,
-
-    NoneType,
-    None,
-
-    Boolean,
-    False,
-    True,
-
-    String,
-    Str(&'src str),
-
-    F32,
-    F64,
-    Float(f64),
 
     FnType {
         param_types: Box<[Box<Self>]>,
@@ -58,8 +45,18 @@ pub enum Expr<'src> {
         typ_args: Box<[Box<Self>]>,
         val_args: Box<[Box<Self>]>,
     },
-
-    Pure,
 }
 
-impl<'src> Syntax for Expr<'src> {}
+impl<'src> From<Primitive<'src>> for Expr<'src> {
+    fn from(v: Primitive<'src>) -> Self {
+        Self::Primitive(v)
+    }
+}
+
+impl<'src> From<PrimitiveType> for Expr<'src> {
+    fn from(t: PrimitiveType) -> Self {
+        Self::PrimitiveType(t)
+    }
+}
+
+impl<'src> Syntax<'src> for Expr<'src> {}
