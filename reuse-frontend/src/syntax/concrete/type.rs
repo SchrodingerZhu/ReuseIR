@@ -277,6 +277,7 @@ impl<'src> Checker<'src> {
                     typ => return Err(ExpectedFnType { typ }),
                 }
             }
+            Expr::Let { .. } => todo!(),
         })
     }
 }

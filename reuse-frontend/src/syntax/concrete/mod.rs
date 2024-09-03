@@ -45,6 +45,13 @@ pub enum Expr<'src> {
         typ_args: Box<[Box<Self>]>,
         val_args: Box<[Box<Self>]>,
     },
+
+    Let {
+        name: Ident<'src>,
+        typ: Option<Box<Self>>,
+        expr: Box<Self>,
+        body: Box<Self>,
+    },
 }
 
 impl<'src> From<Primitive<'src>> for Expr<'src> {

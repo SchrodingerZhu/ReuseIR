@@ -15,13 +15,12 @@ struct Checker<'src> {
     locals: NameMap<'src>,
 }
 
+#[allow(dead_code)]
 impl<'src> Checker<'src> {
-    #[allow(dead_code)]
     pub fn run(file: &mut File<'src>) {
         Self::default().file(file).unwrap();
     }
 
-    #[allow(dead_code)]
     fn file(&mut self, file: &mut File<'src>) -> Result<(), Error<'src>> {
         file.decls
             .iter()
@@ -31,7 +30,6 @@ impl<'src> Checker<'src> {
             .try_fold((), |_, decl| self.decl(decl))
     }
 
-    #[allow(dead_code)]
     fn decl(&mut self, decl: &mut Decl<'src>) -> Result<(), Error<'src>> {
         self.clear_locals();
 
@@ -63,7 +61,6 @@ impl<'src> Checker<'src> {
         }
     }
 
-    #[allow(dead_code)]
     fn expr(&mut self, expr: &mut Expr<'src>) -> Result<(), Error<'src>> {
         use Expr::*;
         match expr {
@@ -78,7 +75,7 @@ impl<'src> Checker<'src> {
                 self.expr(eff)?;
                 self.expr(ret)
             }
-            Fn { params, body } => self.guarded(params, body),
+            Fn { params, body } => self.with_idents(params, body),
             Call {
                 f,
                 typ_args,
@@ -88,11 +85,39 @@ impl<'src> Checker<'src> {
                 typ_args.iter_mut().try_fold((), |_, a| self.expr(a))?;
                 val_args.iter_mut().try_fold((), |_, a| self.expr(a))
             }
+            Let {
+                name,
+                typ,
+                expr,
+                body,
+            } => {
+                typ.as_mut().map(|t| self.expr(t)).transpose()?;
+                self.expr(expr)?;
+                self.with_ident(name, body)
+            }
         }
     }
 
-    #[allow(dead_code)]
-    fn guarded(
+    fn with_ident(
+        &mut self,
+        ident: &Ident<'src>,
+        expr: &mut Expr<'src>,
+    ) -> Result<(), Error<'src>> {
+        let old = self.insert_local(ident).map(|old| Ident {
+            raw: ident.raw,
+            id: old,
+        });
+
+        self.expr(expr)?;
+
+        old.inspect(|o| {
+            self.insert_local(o);
+        });
+
+        Ok(())
+    }
+
+    fn with_idents(
         &mut self,
         idents: &[Ident<'src>],
         expr: &mut Expr<'src>,
@@ -116,7 +141,6 @@ impl<'src> Checker<'src> {
         Ok(())
     }
 
-    #[allow(dead_code)]
     fn ident(&mut self, ident: &mut Ident<'src>) -> Result<(), Error<'src>> {
         ident.id = *self
             .locals
@@ -126,25 +150,21 @@ impl<'src> Checker<'src> {
         Ok(())
     }
 
-    #[allow(dead_code)]
     fn insert_global(&mut self, ident: &Ident<'src>) -> Result<(), Error<'src>> {
         self.globals
             .insert(ident.raw, ident.id)
             .map_or(Ok(()), |_| Err(Error::DuplicateName(ident.raw)))
     }
 
-    #[allow(dead_code)]
     fn insert_local(&mut self, ident: &Ident<'src>) -> Option<ID> {
         self.locals.insert(ident.raw, ident.id)
     }
 
-    #[allow(dead_code)]
     fn param(&mut self, param: &mut Param<'src, Expr<'src>>) -> Result<(), Error<'src>> {
         self.insert_local(&param.name);
         self.expr(&mut param.typ)
     }
 
-    #[allow(dead_code)]
     fn clear_locals(&mut self) {
         self.locals.clear();
     }

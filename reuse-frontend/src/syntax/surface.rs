@@ -188,6 +188,25 @@ fn expr<'src>() -> out!(Box<Expr<'src>>) {
             .or(str().map(Primitive::Str).map(Expr::Primitive))
             .or(float().map(Primitive::Float).map(Expr::Primitive))
             .or(identifier()
+                .padded_by(inline_whitespace())
+                .then(
+                    just(':')
+                        .padded_by(inline_whitespace())
+                        .ignore_then(type_expr())
+                        .padded_by(inline_whitespace())
+                        .or_not(),
+                )
+                .then_ignore(just('=').padded_by(inline_whitespace()))
+                .then(value.clone().padded_by(inline_whitespace()))
+                .then_ignore(newline())
+                .then(value.clone().padded_by(inline_whitespace()))
+                .map(|(((name, typ), expr), body)| Expr::Let {
+                    name,
+                    typ,
+                    expr,
+                    body,
+                }))
+            .or(identifier()
                 .then(
                     just('[')
                         .ignore_then(whitespace())
@@ -379,29 +398,35 @@ mod tests {
         parse(
             "
 
-def f0 (  ) -> None : None
-def f1 (
+def f (  ) -> None : None
+def f (
 ) -> None : None
 
-def f2 [
+def f [
     T,
     U,
 ] (s: str) -> str :
 \"hello, world\"
 
-def f3() -> f64: -114.514
+def f() -> f64: -114.514
 
-def f4() -> [] -> bool:
+def f() -> [] -> bool:
     lambda
         :
             True
-def f5() -> [bool, str] -> bool: lambda a, b: False
+def f() -> [bool, str] -> bool: lambda a, b: False
 
-def f6[T](): None
-def f7(): f6[str]()
+def f[T](): None
+def f(): f[str]()
+
+def f():
+    a : str = \"ok\"
+    a
+def f(): a = 42.0
+    a
 
 data
-  Foo [T]:
+  D [T]:
     A
 B(str)
     C(
