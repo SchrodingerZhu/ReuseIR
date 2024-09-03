@@ -106,9 +106,8 @@ public:
 
 class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
   CompositeLayoutCache &cache;
-  bool generateDestroy(PatternRewriter &rewriter,
-                       TypedValue<RefType> target) const {
-    auto refTy = target.getType();
+  bool generateDestroy(PatternRewriter &rewriter, Value target) const {
+    auto refTy = cast<RefType>(target.getType());
     // primitive types
     if (refTy.getPointee().isIntOrIndexOrFloat()) {
       return true;
