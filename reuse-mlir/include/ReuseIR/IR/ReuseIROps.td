@@ -189,12 +189,11 @@ def RcReleaseOp : ReuseIR_Op<"rc.release"> {
 
   let arguments = (ins 
     Arg<ReuseIR_RcType, "target rc pointer", [MemReadAt<0>, MemWriteAt<1>]>:$rcPtr,
-    OptionalAttr<IndexAttr>:$tag,
-    DenseI64ArrayAttr:$fusedIndices
+    OptionalAttr<IndexAttr>:$tag
   );
   let results = (outs Res<Optional<ReuseIR_NullableToken>, "token">:$token);
   let assemblyFormat = [{
-    `(` $rcPtr `:` type($rcPtr) `)` (`tag` `(` $tag^ `)`)?  custom<FusedIndices>($fusedIndices) attr-dict  (`:` type($token)^)?
+    `(` $rcPtr `:` type($rcPtr) `)` (`tag` `(` $tag^ `)`)? attr-dict  (`:` type($token)^)?
   }];
 
   let hasVerifier = 1;
@@ -305,12 +304,11 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
   // TODO: Add type restrictions
   let arguments = (ins 
     Arg<ReuseIR_RefType, "destroyable object", [MemRead, MemFree<DefaultResource>]>:$object,
-    OptionalAttr<IndexAttr>:$tag,
-    DenseI64ArrayAttr:$fusedIndices
+    OptionalAttr<IndexAttr>:$tag
   );
 
   let assemblyFormat = [{
-    `(` $object `:` type($object) `)` (`tag` `(` $tag^ `)`)? custom<FusedIndices>($fusedIndices) attr-dict
+    `(` $object `:` type($object) `)` (`tag` `(` $tag^ `)`)? attr-dict
   }];
   
   // TODO: add verifier
