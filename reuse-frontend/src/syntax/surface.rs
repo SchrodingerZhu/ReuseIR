@@ -309,6 +309,7 @@ fn type_expr<'src>() -> out!(Box<Expr<'src>>) {
             .or(primitive!("None", NoneType))
             .or(primitive!("f32", F32))
             .or(primitive!("f64", F64))
+            .or(identifier().map(Expr::Ident))
             .map(Box::new)
             .boxed()
     })

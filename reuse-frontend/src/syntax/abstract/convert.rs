@@ -33,7 +33,7 @@ pub fn convert<'src>(want: &'src Term<'src>, got: &'src Term<'src>) -> bool {
                 eff: eff_rhs,
                 ret: ret_rhs,
             },
-        ) => {
+        ) if param_types_lhs.len() == param_types_rhs.len() => {
             param_types_lhs
                 .iter()
                 .zip(param_types_rhs)
