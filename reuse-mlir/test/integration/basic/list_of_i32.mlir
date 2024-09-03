@@ -1,8 +1,8 @@
 // RUN: %reuse-opt %s
 !ilist = !reuse_ir.union<"list" incomplete>
 !rclist = !reuse_ir.rc<!ilist, nonatomic, nonfreezing>
-!cons = !reuse_ir.composite<{i32, !rclist}>
-!nil = !reuse_ir.composite<{}>
+!cons = !reuse_ir.composite<"list::cons" {i32, !rclist}>
+!nil = !reuse_ir.composite<"list::nil" {}>
 !list = !reuse_ir.union<"list" {!cons, !nil}>
 !reflist = !reuse_ir.ref<!ilist, nonfreezing>
 !list_token = !reuse_ir.token<size: 32, alignment: 8>
@@ -26,7 +26,8 @@ module @test  attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<f80, dense
             %cons = reuse_ir.composite.assemble (%head, %acc) : (i32, !rclist) -> !cons
             %next = reuse_ir.union.assemble (0, %cons) : (!cons) -> !list
             %res = reuse_ir.rc.create value(%next) token(%tk) : (!list, !nullable) -> !rclist
-            scf.yield %res : !rclist
+            %recusive = func.call @reverse(%tail, %res) : (!rclist, !rclist) -> !rclist
+            scf.yield %recusive : !rclist
         }
         case 1 {
             reuse_ir.union.inspect %ref [1] : !reflist

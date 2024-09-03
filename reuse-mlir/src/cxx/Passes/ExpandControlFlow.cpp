@@ -14,6 +14,7 @@
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <numeric>
@@ -97,9 +98,10 @@ class RcReleaseExpansionPattern : public OpRewritePattern<RcReleaseOp> {
                                         LLVM::linkage::Linkage::LinkonceODR));
       auto *entry = func.addEntryBlock();
       rewriter.setInsertionPointToStart(entry);
-      rewriter.create<RcReleaseOp>(op->getLoc(), op.getToken().getType(),
-                                   entry->getArgument(0), op.getTagAttr());
-      // TODO: the token ought to be cleaned up
+      auto token =
+          rewriter.create<RcReleaseOp>(op->getLoc(), op.getToken().getType(),
+                                       entry->getArgument(0), op.getTagAttr());
+      rewriter.create<TokenFreeOp>(op->getLoc(), token.getToken());
       rewriter.create<func::ReturnOp>(op->getLoc());
     }
     rewriter.create<func::CallOp>(op->getLoc(), func, op.getRcPtr());
@@ -146,13 +148,29 @@ public:
 
 class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
   CompositeLayoutCache &cache;
+  bool needDrop(Type type) const {
+    if (type.isIntOrIndexOrFloat())
+      return false;
+    if (auto compositeTy = dyn_cast<CompositeType>(type)) {
+      return std::any_of(compositeTy.getInnerTypes().begin(),
+                         compositeTy.getInnerTypes().end(),
+                         [&](Type ty) { return needDrop(ty); });
+    }
+    if (auto arrayTy = dyn_cast<ArrayType>(type))
+      return needDrop(arrayTy.getElementType());
+    if (auto unionTy = dyn_cast<UnionType>(type))
+      return std::any_of(unionTy.getInnerTypes().begin(),
+                         unionTy.getInnerTypes().end(),
+                         [&](Type ty) { return needDrop(ty); });
+    return true;
+  }
   bool generateDestroy(PatternRewriter &rewriter, Value target,
                        IntegerAttr tag) const {
     auto refTy = cast<RefType>(target.getType());
     // primitive types
-    if (refTy.getPointee().isIntOrIndexOrFloat()) {
+    if (!needDrop(refTy.getPointee()))
       return true;
-    }
+
     // rc pointer, apply RcReleaseOp
     if (auto rcTy = dyn_cast<RcType>(refTy.getPointee())) {
       auto loaded = rewriter.create<LoadOp>(target.getLoc(), rcTy, target);
@@ -177,6 +195,8 @@ class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
     // for composite type, iterate through the fields and generate the destroy
     // recursively
     if (auto compositeTy = dyn_cast<CompositeType>(refTy.getPointee())) {
+      if (!needDrop(compositeTy))
+        return true;
       for (auto [i, ty] : llvm::enumerate(compositeTy.getInnerTypes())) {
         if (ty.isIntOrIndexOrFloat())
           continue;
@@ -215,6 +235,7 @@ class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
         auto ref = rewriter.create<UnionInspectOp>(target.getLoc(), fieldRef,
                                                    target, tag);
         generateDestroy(rewriter, ref.getResult(), {});
+        return true;
       }
       auto getTag = rewriter.create<UnionGetTagOp>(target.getLoc(), target);
       llvm::SmallVector<int64_t> cases;
@@ -228,7 +249,7 @@ class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
         auto &region = switchOp.getCaseRegions()[idx];
         auto *blk = rewriter.createBlock(&region);
         rewriter.setInsertionPointToStart(blk);
-        if (!ty.isIntOrIndexOrFloat()) {
+        if (needDrop(ty)) {
           auto fieldRef =
               RefType::get(getContext(), ty, refTy.getFreezingKind());
           auto ref = rewriter.create<UnionInspectOp>(
