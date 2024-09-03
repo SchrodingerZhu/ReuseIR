@@ -32,6 +32,13 @@ mlir::AliasResult AliasAnalysis::alias(mlir::Value lhs, mlir::Value rhs) {
         alias(lhsBorrow.getObject(), rhsBorrow.getObject()) ==
             mlir::AliasResult::MustAlias)
       return mlir::AliasResult::MustAlias;
+    // are they inspected from a must-alias reference?
+    auto lhsInspect = dyn_cast_or_null<UnionInspectOp>(lhs.getDefiningOp());
+    auto rhsInspect = dyn_cast_or_null<UnionInspectOp>(rhs.getDefiningOp());
+    if (lhsInspect && rhsInspect &&
+        alias(lhsInspect.getUnionRef(), rhsInspect.getUnionRef()) ==
+            mlir::AliasResult::MustAlias)
+      return mlir::AliasResult::MustAlias;
   }
 
   // We skip possible alias for mref/nullable rc types. they are not

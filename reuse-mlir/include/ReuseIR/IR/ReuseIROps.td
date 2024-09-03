@@ -154,7 +154,7 @@ def RcAcquireOp : ReuseIR_Op<"rc.acquire"> {
     ```
   }];
 
-  let arguments = (ins Arg<ReuseIR_RcType, "target rc pointer", [MemReadAt<0>, MemReadAt<1>]>:$rcPtr);
+  let arguments = (ins Arg<ReuseIR_RcType, "target rc pointer", [MemReadAt<0>, MemWriteAt<1>]>:$rcPtr);
 
   let assemblyFormat = [{
     `(` $rcPtr `:` type($rcPtr) `)` attr-dict
