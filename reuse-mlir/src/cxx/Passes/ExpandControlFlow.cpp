@@ -13,7 +13,6 @@
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <cstdint>
-#include <llvm-20/llvm/Support/raw_ostream.h>
 #include <memory>
 #include <numeric>
 
