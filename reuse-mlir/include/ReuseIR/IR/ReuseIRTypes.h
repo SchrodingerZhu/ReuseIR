@@ -147,5 +147,14 @@ inline bool isProjectable(mlir::Type type) {
       .Case<ArrayType>([](auto &&) { return true; })
       .Default([](auto &&) { return false; });
 }
+inline void formatMangledNameTo(mlir::Type type,
+                                llvm::raw_string_ostream &buffer) {
+  llvm::TypeSwitch<mlir::Type>(type)
+      .Case<mlir::reuse_ir::ReuseIRMangleInterface>(
+          [&](ReuseIRMangleInterface iface) {
+            iface.formatMangledNameTo(buffer);
+          })
+      .Default([&](mlir::Type type) { type.print(buffer); });
+}
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir

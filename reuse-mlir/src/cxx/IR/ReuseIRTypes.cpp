@@ -210,7 +210,7 @@ TokenType::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
 
 // TokenType mangle
 void TokenType::formatMangledNameTo(::llvm::raw_string_ostream &buffer) const {
-  buffer << "5TokenILm" << getSize() << "Elm" << getAlignment() << "EE";
+  buffer << "$Token<" << getSize() << "," << getAlignment() << ">";
 }
 
 void ReuseIRDialect::registerTypes() {

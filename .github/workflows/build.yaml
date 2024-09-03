@@ -21,7 +21,8 @@ jobs:
             wget https://apt.llvm.org/llvm.sh
             chmod +x llvm.sh
             sudo ./llvm.sh ${{matrix.version}} all
-            sudo apt-get install -y mlir-${{matrix.version}}-tools libmlir-${{matrix.version}}-dev ninja-build cmake
+            sudo apt-get install -y mlir-${{matrix.version}}-tools libmlir-${{matrix.version}}-dev ninja-build cmake libllvm${{matrix.version}}
+            sudo sed -i 's/libLLVM.so.1/libLLVM.so/g' /usr/lib/llvm-${{matrix.version}}/lib/cmake/llvm/LLVMExports-relwithdebinfo.cmake
       - name: Install LLVM Lit
         run: |
             pip install lit
