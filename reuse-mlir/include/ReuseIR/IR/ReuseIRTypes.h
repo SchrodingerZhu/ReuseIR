@@ -20,7 +20,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
-#include <llvm-20/llvm/Support/ErrorHandling.h>
 #include <variant>
 
 #define GET_TYPEDEF_CLASSES
