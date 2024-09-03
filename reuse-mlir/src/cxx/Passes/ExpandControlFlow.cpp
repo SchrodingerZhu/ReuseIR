@@ -98,8 +98,7 @@ class RcReleaseExpansionPattern : public OpRewritePattern<RcReleaseOp> {
       auto *entry = func.addEntryBlock();
       rewriter.setInsertionPointToStart(entry);
       rewriter.create<RcReleaseOp>(op->getLoc(), op.getToken().getType(),
-                                   entry->getArgument(0), op.getTagAttr(),
-                                   op.getFusedIndices());
+                                   entry->getArgument(0), op.getTagAttr());
       // TODO: the token ought to be cleaned up
       rewriter.create<func::ReturnOp>(op->getLoc());
     }
@@ -130,8 +129,7 @@ public:
           auto refTy = RefType::get(getContext(), rcTy.getPointee(),
                                     rcTy.getFreezingKind());
           auto borrowed = builder.create<RcBorrowOp>(loc, refTy, op.getRcPtr());
-          builder.create<DestroyOp>(loc, borrowed, op.getTagAttr(),
-                                    op.getFusedIndices());
+          builder.create<DestroyOp>(loc, borrowed, op.getTagAttr());
           auto resTy = cast<NullableType>(op.getToken().getType());
           auto token = builder.create<RcTokenizeOp>(loc, resTy.getPointer(),
                                                     op.getRcPtr());
@@ -166,14 +164,12 @@ class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
         auto align = cache.get(rcBoxTy).getAlignment();
         auto tokenTy = TokenType::get(getContext(), align.value(), size);
         auto nullableTy = NullableType::get(getContext(), tokenTy);
-        auto release = rewriter.create<RcReleaseOp>(
-            target.getLoc(), nullableTy, loaded, nullptr,
-            rewriter.getDenseI64ArrayAttr({}));
+        auto release = rewriter.create<RcReleaseOp>(target.getLoc(), nullableTy,
+                                                    loaded, nullptr);
         // avoid nested release to be expanded
         release->setAttr("nested", rewriter.getUnitAttr());
       } else
-        rewriter.create<RcReleaseOp>(target.getLoc(), Type{}, loaded, nullptr,
-                                     rewriter.getDenseI64ArrayAttr({}));
+        rewriter.create<RcReleaseOp>(target.getLoc(), Type{}, loaded, nullptr);
 
       return true;
     }
@@ -205,8 +201,7 @@ class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
           target.getLoc(), exists, [&](OpBuilder &builder, Location loc) {
             auto coerced = builder.create<NullableCoerceOp>(loc, rcTy, loaded);
             // freezeable pointer has no token
-            builder.create<RcReleaseOp>(loc, Type{}, coerced, nullptr,
-                                        rewriter.getDenseI64ArrayAttr({}));
+            builder.create<RcReleaseOp>(loc, Type{}, coerced, nullptr);
             builder.create<scf::YieldOp>(loc);
           });
       return true;
