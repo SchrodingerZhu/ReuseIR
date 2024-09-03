@@ -209,8 +209,50 @@ TokenType::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
 }
 
 // TokenType mangle
-void TokenType::formatMangledNameTo(::llvm::raw_string_ostream &buffer) const {
+void TokenType::formatMangledNameTo(::llvm::raw_ostream &buffer) const {
   buffer << "$Token<" << getSize() << "," << getAlignment() << ">";
+}
+
+// RcType mangle
+void RcType::formatMangledNameTo(::llvm::raw_ostream &buffer) const {
+  buffer << "$Rc<";
+  mlir::reuse_ir::formatMangledNameTo(getPointee(), buffer);
+  buffer << "," << stringifyAtomicKind(getAtomicKind().getValue()) << ","
+         << stringifyFreezingKind(getFreezingKind().getValue()) << ">";
+}
+
+// ArrayType mangle
+void ArrayType::formatMangledNameTo(::llvm::raw_ostream &buffer) const {
+  buffer << "$Array<";
+  mlir::reuse_ir::formatMangledNameTo(getElementType(), buffer);
+  buffer << ",";
+  llvm::interleaveComma(getSizes(), buffer);
+  buffer << ">";
+}
+
+// VectorType mangle
+void VectorType::formatMangledNameTo(::llvm::raw_ostream &buffer) const {
+  buffer << "$Vector<";
+  mlir::reuse_ir::formatMangledNameTo(getElementType(), buffer);
+  buffer << ">";
+}
+
+// OpaqueType mangle
+void OpaqueType::formatMangledNameTo(::llvm::raw_ostream &buffer) const {
+  buffer << "$Opaque<" << getSize() << "," << getAlignment() << ">";
+}
+
+// ClosureType mangle
+void ClosureType::formatMangledNameTo(::llvm::raw_ostream &buffer) const {
+  buffer << "$Closure<(";
+  for (auto [idx, iTy] : llvm::enumerate(getInputTypes())) {
+    mlir::reuse_ir::formatMangledNameTo(iTy, buffer);
+    if (idx + 1 != getInputTypes().size())
+      buffer << ",";
+  }
+  buffer << "),";
+  mlir::reuse_ir::formatMangledNameTo(getOutputType(), buffer);
+  buffer << ">";
 }
 
 void ReuseIRDialect::registerTypes() {
@@ -388,6 +430,21 @@ UnionTypeImpl::getDataLayout(::mlir::DataLayout layout,
   size = ::llvm::alignTo(size, alignment.value());
   return {size, alignment};
 }
+void UnionTypeImpl::formatMangledNameTo(llvm::raw_ostream &buffer,
+                                        ArrayRef<Type> innerTypes,
+                                        mlir::StringAttr name) {
+  if (name) {
+    buffer << name.getValue();
+    return;
+  }
+  buffer << "$Union<";
+  for (auto [idx, iTy] : llvm::enumerate(innerTypes)) {
+    mlir::reuse_ir::formatMangledNameTo(iTy, buffer);
+    if (idx + 1 != innerTypes.size())
+      buffer << ",";
+  }
+  buffer << ">";
+}
 CompositeLayout
 CompositeTypeImpl::getCompositeLayout(mlir::MLIRContext *ctx,
                                       ::mlir::DataLayout layout,
@@ -411,6 +468,21 @@ LogicalResult CompositeTypeImpl::verify(
     return mlir::failure();
   }
   return mlir::success();
+}
+void CompositeTypeImpl::formatMangledNameTo(llvm::raw_ostream &buffer,
+                                            ArrayRef<Type> innerTypes,
+                                            mlir::StringAttr name) {
+  if (name) {
+    buffer << name.getValue();
+    return;
+  }
+  buffer << "$Composite<";
+  for (auto [idx, iTy] : llvm::enumerate(innerTypes)) {
+    mlir::reuse_ir::formatMangledNameTo(iTy, buffer);
+    if (idx + 1 != innerTypes.size())
+      buffer << ",";
+  }
+  buffer << ">";
 }
 template struct ContainerLikeTypeStorage<detail::CompositeTypeImpl>;
 template struct ContainerLikeTypeStorage<detail::UnionTypeImpl>;

@@ -4,10 +4,12 @@
 #include "ReuseIR/Interfaces/ReuseIRCompositeLayoutInterface.h"
 #include "ReuseIR/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Support/LLVM.h"
@@ -70,16 +72,49 @@ public:
 };
 
 class RcReleaseExpansionPattern : public OpRewritePattern<RcReleaseOp> {
+  void emitCallToOutlinedRelease(RcReleaseOp op,
+                                 PatternRewriter &rewriter) const {
+    std::string uniqueName;
+    llvm::raw_string_ostream os(uniqueName);
+    formatMangledNameTo(op.getRcPtr().getType(), os);
+    os << "::release";
+    SymbolTable symbolTable(op->getParentOfType<ModuleOp>());
+    auto func =
+        dyn_cast_if_present<func::FuncOp>(symbolTable.lookup(uniqueName));
+    if (!func) {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPoint(op->getParentOfType<func::FuncOp>());
+      auto funcTy = FunctionType::get(rewriter.getContext(),
+                                      op.getRcPtr().getType(), TypeRange{});
+      func = rewriter.create<func::FuncOp>(op->getLoc(), uniqueName, funcTy);
+      func.setSymVisibility("private");
+      func->setAttr("llvm.linkage", LLVM::LinkageAttr::get(
+                                        rewriter.getContext(),
+                                        LLVM::linkage::Linkage::LinkonceODR));
+      auto *entry = func.addEntryBlock();
+      rewriter.setInsertionPointToStart(entry);
+      rewriter.create<RcReleaseOp>(op->getLoc(), op.getToken().getType(),
+                                   entry->getArgument(0), op.getTagAttr(),
+                                   op.getFusedIndices());
+      // TODO: the token ought to be cleaned up
+      rewriter.create<func::ReturnOp>(op->getLoc());
+    }
+    rewriter.create<func::CallOp>(op->getLoc(), func, op.getRcPtr());
+  }
+
 public:
   using OpRewritePattern::OpRewritePattern;
   LogicalResult matchAndRewrite(RcReleaseOp op,
                                 PatternRewriter &rewriter) const final {
-    if (op->hasAttr("nested"))
-      return LogicalResult::failure();
     RcType rcTy = op.getRcPtr().getType();
     // we only need to expand for nonfreezing RC pointers
     if (rcTy.getFreezingKind().getValue() != FreezingKind::nonfreezing)
       return LogicalResult::failure();
+    if (op->hasAttr("nested")) {
+      emitCallToOutlinedRelease(op, rewriter);
+      rewriter.eraseOp(op);
+      return LogicalResult::success();
+    }
     auto decreaseOp =
         rewriter.create<RcDecreaseOp>(op->getLoc(), op.getRcPtr());
     rewriter.replaceOpWithNewOp<scf::IfOp>(
@@ -90,7 +125,7 @@ public:
           auto borrowed = builder.create<RcBorrowOp>(loc, refTy, op.getRcPtr());
           builder.create<DestroyOp>(loc, borrowed, op.getTagAttr(),
                                     op.getFusedIndices());
-          auto resTy = cast<NullableType>(op.getResultTypes()[0]);
+          auto resTy = cast<NullableType>(op.getToken().getType());
           auto token = builder.create<RcTokenizeOp>(loc, resTy.getPointer(),
                                                     op.getRcPtr());
           auto nonnull = builder.create<NullableNonNullOp>(loc, resTy, token);
@@ -106,7 +141,8 @@ public:
 
 class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
   CompositeLayoutCache &cache;
-  bool generateDestroy(PatternRewriter &rewriter, Value target) const {
+  bool generateDestroy(PatternRewriter &rewriter, Value target,
+                       IntegerAttr tag) const {
     auto refTy = cast<RefType>(target.getType());
     // primitive types
     if (refTy.getPointee().isIntOrIndexOrFloat()) {
@@ -114,19 +150,24 @@ class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
     }
     // rc pointer, apply RcReleaseOp
     if (auto rcTy = dyn_cast<RcType>(refTy.getPointee())) {
-      auto rcBoxTy =
-          RcBoxType::get(getContext(), rcTy.getPointee(), rcTy.getAtomicKind(),
-                         rcTy.getFreezingKind());
-      auto size = cache.get(rcBoxTy).getSize();
-      auto align = cache.get(rcBoxTy).getAlignment();
-      auto tokenTy = TokenType::get(getContext(), align.value(), size);
-      auto nullableTy = NullableType::get(getContext(), tokenTy);
       auto loaded = rewriter.create<LoadOp>(target.getLoc(), rcTy, target);
-      auto release = rewriter.create<RcReleaseOp>(
-          target.getLoc(), nullableTy, loaded, nullptr,
-          rewriter.getDenseI64ArrayAttr({}));
-      // avoid nested release to be expanded
-      release->setAttr("nested", rewriter.getUnitAttr());
+      if (rcTy.getFreezingKind().getValue() == FreezingKind::nonfreezing) {
+        auto rcBoxTy =
+            RcBoxType::get(getContext(), rcTy.getPointee(),
+                           rcTy.getAtomicKind(), rcTy.getFreezingKind());
+        auto size = cache.get(rcBoxTy).getSize();
+        auto align = cache.get(rcBoxTy).getAlignment();
+        auto tokenTy = TokenType::get(getContext(), align.value(), size);
+        auto nullableTy = NullableType::get(getContext(), tokenTy);
+        auto release = rewriter.create<RcReleaseOp>(
+            target.getLoc(), nullableTy, loaded, nullptr,
+            rewriter.getDenseI64ArrayAttr({}));
+        // avoid nested release to be expanded
+        release->setAttr("nested", rewriter.getUnitAttr());
+      } else
+        rewriter.create<RcReleaseOp>(target.getLoc(), Type{}, loaded, nullptr,
+                                     rewriter.getDenseI64ArrayAttr({}));
+
       return true;
     }
 
@@ -134,11 +175,13 @@ class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
     // recursively
     if (auto compositeTy = dyn_cast<CompositeType>(refTy.getPointee())) {
       for (auto [i, ty] : llvm::enumerate(compositeTy.getInnerTypes())) {
+        if (ty.isIntOrIndexOrFloat())
+          continue;
         auto fieldRefTy =
             RefType::get(getContext(), ty, refTy.getFreezingKind());
         auto field = rewriter.create<ProjOp>(target.getLoc(), fieldRefTy,
                                              target, rewriter.getIndexAttr(i));
-        generateDestroy(rewriter, field);
+        generateDestroy(rewriter, field, {});
       }
       return true;
     }
@@ -164,22 +207,32 @@ class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
 
     // for union type, expand it to index_switch
     if (auto unionTy = dyn_cast<UnionType>(refTy.getPointee())) {
-      auto tag = rewriter.create<UnionGetTagOp>(target.getLoc(), target);
+      if (tag) {
+        auto ty = unionTy.getInnerTypes()[tag.getAPSInt().getZExtValue()];
+        auto fieldRef = RefType::get(getContext(), ty, refTy.getFreezingKind());
+        auto ref = rewriter.create<UnionInspectOp>(target.getLoc(), fieldRef,
+                                                   target, tag);
+        generateDestroy(rewriter, ref.getResult(), {});
+      }
+      auto getTag = rewriter.create<UnionGetTagOp>(target.getLoc(), target);
       llvm::SmallVector<int64_t> cases;
       cases.resize(unionTy.getInnerTypes().size());
       std::iota(cases.begin(), cases.end(), 0);
       auto switchOp = rewriter.create<scf::IndexSwitchOp>(
-          target.getLoc(), TypeRange{}, tag, cases,
+          target.getLoc(), TypeRange{}, getTag, cases,
           unionTy.getInnerTypes().size());
       for (auto [idx, ty] : llvm::enumerate(unionTy.getInnerTypes())) {
         OpBuilder::InsertionGuard guard(rewriter);
         auto &region = switchOp.getCaseRegions()[idx];
         auto *blk = rewriter.createBlock(&region);
         rewriter.setInsertionPointToStart(blk);
-        auto fieldRef = RefType::get(getContext(), ty, refTy.getFreezingKind());
-        auto ref = rewriter.create<UnionInspectOp>(
-            target.getLoc(), fieldRef, target, rewriter.getIndexAttr(idx));
-        generateDestroy(rewriter, ref.getResult());
+        if (!ty.isIntOrIndexOrFloat()) {
+          auto fieldRef =
+              RefType::get(getContext(), ty, refTy.getFreezingKind());
+          auto ref = rewriter.create<UnionInspectOp>(
+              target.getLoc(), fieldRef, target, rewriter.getIndexAttr(idx));
+          generateDestroy(rewriter, ref.getResult(), {});
+        }
         rewriter.create<scf::YieldOp>(target.getLoc());
       }
       // insert unreachable for the default case
@@ -208,7 +261,7 @@ public:
 
   LogicalResult matchAndRewrite(DestroyOp op,
                                 PatternRewriter &rewriter) const final {
-    if (generateDestroy(rewriter, op.getObject())) {
+    if (generateDestroy(rewriter, op.getObject(), op.getTagAttr())) {
       rewriter.eraseOp(op);
       return LogicalResult::success();
     }
