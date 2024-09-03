@@ -250,6 +250,9 @@ struct CompositeTypeImpl {
   static ::mlir::LogicalResult
   verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
          ArrayRef<Type> innerTypes, mlir::StringAttr name, bool incomplete);
+  static void formatMangledNameTo(llvm::raw_ostream &buffer,
+                                  ArrayRef<Type> innerTypes,
+                                  mlir::StringAttr name);
 };
 struct UnionTypeImpl {
   static constexpr llvm::StringLiteral name = "reuse_ir.union";
@@ -264,6 +267,9 @@ struct UnionTypeImpl {
                                         ArrayRef<Type> innerTypes);
   static std::pair<::llvm::TypeSize, ::llvm::Align>
   getDataLayout(::mlir::DataLayout layout, ArrayRef<Type> innerTypes);
+  static void formatMangledNameTo(llvm::raw_ostream &buffer,
+                                  ArrayRef<Type> innerTypes,
+                                  mlir::StringAttr name);
 };
 
 extern template struct ContainerLikeTypeStorage<detail::CompositeTypeImpl>;

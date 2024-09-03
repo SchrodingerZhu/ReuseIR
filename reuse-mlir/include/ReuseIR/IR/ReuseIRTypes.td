@@ -84,7 +84,10 @@ def ReuseIR_NullableType : ReuseIR_Type<"Nullable", "nullable",
 }
 
 def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
+    [
+      DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
+      DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>
+    ]> {
   let summary = "ReuseIR Control Box";
   let description = [{
     `reuse_ir.rcbox` is the underlying control box of RC managed objects.
@@ -135,7 +138,7 @@ def ReuseIR_RcBoxType : ReuseIR_Type<"RcBox", "rcbox",
 }
 
 def ReuseIR_RcType : ReuseIR_Type<"Rc", "rc",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRMangleInterface>]> {
 
   let summary = "ReuseIR Rc Pointer Type";
   let description = [{
@@ -191,7 +194,7 @@ def ReuseIR_RefType : ReuseIR_Type<"Ref", "ref",
 }
 
 def ReuseIR_ArrayType : ReuseIR_Type<"Array", "array",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRMangleInterface>]> {
 
   let summary = "ReuseIR Array Type";
   let description = [{
@@ -209,8 +212,11 @@ def ReuseIR_ArrayType : ReuseIR_Type<"Array", "array",
 }
 
 def ReuseIR_VectorType : ReuseIR_Type<"Vector", "vector",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
-
+    [
+      DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
+      DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>,
+      DeclareTypeInterfaceMethods<ReuseIRMangleInterface>
+    ]> {
   let summary = "ReuseIR Vector Type";
   let description = [{
     `reuse_ir.vector` is a single-dimension vector with dynamic length.
@@ -231,8 +237,11 @@ def ReuseIR_VectorType : ReuseIR_Type<"Vector", "vector",
 }
 
 def ReuseIR_OpaqueType : ReuseIR_Type<"Opaque", "opaque",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
-
+    [
+      DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
+      DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>,
+      DeclareTypeInterfaceMethods<ReuseIRMangleInterface>
+    ]> {
   let summary = "ReuseIR Opaque Type";
   let description = [{
     `reuse_ir.opaque` is an opaque type for externally managed object.
@@ -261,7 +270,11 @@ def ReuseIR_UnionType : Type<CPred<"::mlir::isa<::mlir::reuse_ir::UnionType>($_s
                           "ReuseIR union  type">;
 
 def ReuseIR_ClosureType : ReuseIR_Type<"Closure", "closure",
-    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>]> {
+    [
+      DeclareTypeInterfaceMethods<DataLayoutTypeInterface>, 
+      DeclareTypeInterfaceMethods<ReuseIRCompositeLayoutInterface>,
+      DeclareTypeInterfaceMethods<ReuseIRMangleInterface>
+    ]> {
 
   let summary = "ReuseIR Closure Type";
   let description = [{

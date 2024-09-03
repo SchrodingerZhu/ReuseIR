@@ -42,12 +42,13 @@ class ContainerLikeType
     : public Type::TypeBase<
           ContainerLikeType<Impl>, Type, detail::ContainerLikeTypeStorage<Impl>,
           DataLayoutTypeInterface::Trait,
-          ReuseIRCompositeLayoutInterface::Trait, TypeTrait::IsMutable> {
+          ReuseIRCompositeLayoutInterface::Trait, ReuseIRMangleInterface::Trait,
+          TypeTrait::IsMutable> {
 public:
   using Base = Type::TypeBase<
       ContainerLikeType<Impl>, Type, detail::ContainerLikeTypeStorage<Impl>,
       DataLayoutTypeInterface::Trait, ReuseIRCompositeLayoutInterface::Trait,
-      TypeTrait::IsMutable>;
+      ReuseIRMangleInterface::Trait, TypeTrait::IsMutable>;
   using Base::Base;
   using Base::getChecked;
 
@@ -112,6 +113,9 @@ public:
                                  DataLayoutEntryListRef params) const {
     return getCompositeLayout(dataLayout).getAlignment().value();
   }
+  void formatMangledNameTo(llvm::raw_ostream &buffer) {
+    Impl::formatMangledNameTo(buffer, getInnerTypes(), getName());
+  }
   // CompositeLayoutInterface methods.
   ::mlir::reuse_ir::CompositeLayout
   getCompositeLayout(::mlir::DataLayout layout) const {
@@ -147,8 +151,7 @@ inline bool isProjectable(mlir::Type type) {
       .Case<ArrayType>([](auto &&) { return true; })
       .Default([](auto &&) { return false; });
 }
-inline void formatMangledNameTo(mlir::Type type,
-                                llvm::raw_string_ostream &buffer) {
+inline void formatMangledNameTo(mlir::Type type, llvm::raw_ostream &buffer) {
   llvm::TypeSwitch<mlir::Type>(type)
       .Case<mlir::reuse_ir::ReuseIRMangleInterface>(
           [&](ReuseIRMangleInterface iface) {
