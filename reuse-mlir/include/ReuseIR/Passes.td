@@ -32,6 +32,9 @@ def ReuseIRExpandControlFlow : Pass<"reuse-ir-expand-control-flow", "::mlir::Mod
     - reuse_ir.token.free (with nullible token)
     - reuse_ir.rc.release
   }];
+    let options = [
+    Option<"outlineNestedRelease", "outline-nested-release", "bool", "false", "Outline nested RC release operations">
+  ];
   let constructor = "::mlir::reuse_ir::createReuseIRExpandControlFlowPass()";
   let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect", "::mlir::scf::SCFDialect"];
 }

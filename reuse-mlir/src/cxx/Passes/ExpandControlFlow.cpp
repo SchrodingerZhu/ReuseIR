@@ -22,6 +22,9 @@ namespace mlir {
 
 namespace REUSE_IR_DECL_SCOPE {
 
+#define GEN_PASS_DEF_REUSEIREXPANDCONTROLFLOW
+#include "ReuseIR/Passes.h.inc"
+
 class TokenEnsureExpansionPattern : public OpRewritePattern<TokenEnsureOp> {
 public:
   using OpRewritePattern::OpRewritePattern;
@@ -71,6 +74,7 @@ public:
   }
 };
 
+template <bool OUTLINE_NESTED>
 class RcReleaseExpansionPattern : public OpRewritePattern<RcReleaseOp> {
   void emitCallToOutlinedRelease(RcReleaseOp op,
                                  PatternRewriter &rewriter) const {
@@ -111,9 +115,12 @@ public:
     if (rcTy.getFreezingKind().getValue() != FreezingKind::nonfreezing)
       return LogicalResult::failure();
     if (op->hasAttr("nested")) {
-      emitCallToOutlinedRelease(op, rewriter);
-      rewriter.eraseOp(op);
-      return LogicalResult::success();
+      if (OUTLINE_NESTED) {
+        emitCallToOutlinedRelease(op, rewriter);
+        rewriter.eraseOp(op);
+        return LogicalResult::success();
+      }
+      return LogicalResult::failure();
     }
     auto decreaseOp =
         rewriter.create<RcDecreaseOp>(op->getLoc(), op.getRcPtr());
@@ -270,7 +277,7 @@ public:
 };
 
 struct ReuseIRExpandControlFlowPass
-    : public ReuseIRExpandControlFlowBase<ReuseIRExpandControlFlowPass> {
+    : public impl::ReuseIRExpandControlFlowBase<ReuseIRExpandControlFlowPass> {
   using ReuseIRExpandControlFlowBase::ReuseIRExpandControlFlowBase;
   void runOnOperation() override final;
 };
@@ -282,8 +289,13 @@ void ReuseIRExpandControlFlowPass::runOnOperation() {
   // Collect rewrite patterns.
   RewritePatternSet patterns(&getContext());
   patterns.add<DestroyExpansionPattern>(cache, &getContext());
-  patterns.add<TokenEnsureExpansionPattern, TokenFreeExpansionPattern,
-               RcReleaseExpansionPattern>(&getContext());
+  patterns.add<TokenEnsureExpansionPattern, TokenFreeExpansionPattern>(
+      &getContext());
+
+  if (outlineNestedRelease)
+    patterns.add<RcReleaseExpansionPattern<true>>(&getContext());
+  else
+    patterns.add<RcReleaseExpansionPattern<false>>(&getContext());
 
   // Configure rewrite to ignore new ops created during the pass.
   GreedyRewriteConfig config;
@@ -300,5 +312,9 @@ namespace reuse_ir {
 std::unique_ptr<Pass> createReuseIRExpandControlFlowPass() {
   return std::make_unique<ReuseIRExpandControlFlowPass>();
 }
+std::unique_ptr<Pass> createReuseIRExpandControlFlowPass(
+    const ReuseIRExpandControlFlowOptions &options) {
+  return std::make_unique<ReuseIRExpandControlFlowPass>(options);
+};
 } // namespace reuse_ir
 } // namespace mlir
