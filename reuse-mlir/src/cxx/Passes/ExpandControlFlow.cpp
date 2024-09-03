@@ -115,7 +115,7 @@ public:
     // we only need to expand for nonfreezing RC pointers
     if (rcTy.getFreezingKind().getValue() != FreezingKind::nonfreezing)
       return LogicalResult::failure();
-    if (op->hasAttr("nested")) {
+    if (op->hasAttr(NESTED)) {
       if (OUTLINE_NESTED) {
         emitCallToOutlinedRelease(op, rewriter);
         rewriter.eraseOp(op);
@@ -125,7 +125,7 @@ public:
     }
     auto decreaseOp =
         rewriter.create<RcDecreaseOp>(op->getLoc(), op.getRcPtr());
-    rewriter.replaceOpWithNewOp<scf::IfOp>(
+    scf::IfOp branch = rewriter.replaceOpWithNewOp<scf::IfOp>(
         op, decreaseOp,
         [&](OpBuilder &builder, Location loc) {
           auto refTy = RefType::get(getContext(), rcTy.getPointee(),
@@ -142,6 +142,7 @@ public:
           auto null = builder.create<NullableNullOp>(loc, op.getResultTypes());
           builder.create<scf::YieldOp>(loc, null->getResults());
         });
+    branch->setAttr(RELEASE, rewriter.getUnitAttr());
     return LogicalResult::success();
   }
 };
@@ -185,7 +186,7 @@ class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
         auto release = rewriter.create<RcReleaseOp>(target.getLoc(), nullableTy,
                                                     loaded, nullptr);
         // avoid nested release to be expanded
-        release->setAttr("nested", rewriter.getUnitAttr());
+        release->setAttr(NESTED, rewriter.getUnitAttr());
       } else
         rewriter.create<RcReleaseOp>(target.getLoc(), Type{}, loaded, nullptr);
 

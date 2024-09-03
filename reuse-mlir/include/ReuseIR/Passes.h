@@ -22,5 +22,8 @@ std::unique_ptr<Pass> createReuseIRInferUnionTagPass();
 #define GEN_PASS_DECL
 #include "ReuseIR/Passes.h.inc"
 
+inline constexpr llvm::StringLiteral NESTED = "reuse_ir.nested";
+inline constexpr llvm::StringLiteral RELEASE = "reuse_ir.release";
+
 } // namespace reuse_ir
 } // namespace mlir
