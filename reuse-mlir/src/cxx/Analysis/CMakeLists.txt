@@ -1,7 +1,7 @@
 add_mlir_dialect_library(MLIRReuseIRAnalysis
   STATIC
     AliasAnalysis.cpp
-    AnticipatedAllocation.cpp
+    ReuseAnalysis.cpp
   DEPENDS
     MLIRReuseIR
   LINK_COMPONENTS

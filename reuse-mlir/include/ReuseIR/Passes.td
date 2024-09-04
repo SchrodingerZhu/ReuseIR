@@ -57,4 +57,13 @@ def ReuseIRInferUnionTag : Pass<"reuse-ir-infer-union-tag", "::mlir::func::FuncO
   let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
 }
 
+def ReuseIRPrintReuseAnalysis : Pass<"reuse-ir-print-reuse-analysis", "::mlir::ModuleOp"> {
+  let summary = "Print Reuse Analysis";
+  let description = [{
+    This pass is used to print the reuse analysis information.
+  }];
+  let constructor = "::mlir::reuse_ir::createReuseIRPrintReuseAnalysisPass()";
+  let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
+}
+
 #endif // REUSE_IR_PASSES

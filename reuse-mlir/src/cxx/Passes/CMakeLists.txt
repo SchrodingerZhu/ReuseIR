@@ -1,6 +1,3 @@
-if (REUSE_IR_ENABLE_TESTS)
-  add_subdirectory(test)
-endif()
 add_mlir_dialect_library(MLIRReuseIRPasses
   STATIC
     ConvertReuseIRToLLVM.cpp
@@ -8,6 +5,7 @@ add_mlir_dialect_library(MLIRReuseIRPasses
     ExpandControlFlow.cpp
     AcquireReleaseFusion.cpp
     InferUnionTag.cpp
+    PrintReuseAnalysis.cpp
   DEPENDS
     MLIRReuseIR
     MLIRReuseIRAnalysis
