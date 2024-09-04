@@ -97,7 +97,7 @@ ReuseAnalysis::RetType ReuseAnalysis::visitOperation(Operation *op,
                                       after->setUsedToken(reuseCandidate) |
                                       after->eraseAliveToken(reuseCandidate));
       else
-        propagateIfChanged(after, changed);
+        propagateIfChanged(after, changed | after->clearTokenUsed());
     }
   } while (false);
 
