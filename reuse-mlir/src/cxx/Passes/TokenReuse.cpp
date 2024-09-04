@@ -8,19 +8,22 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
+#include <llvm-20/llvm/Support/raw_ostream.h>
 #include <memory>
 
 namespace mlir {
 namespace reuse_ir {
 
-struct ReuseIRPrintReuseAnalysisPass
-    : public ReuseIRPrintReuseAnalysisBase<ReuseIRPrintReuseAnalysisPass> {
-  using ReuseIRPrintReuseAnalysisBase::ReuseIRPrintReuseAnalysisBase;
+struct ReuseIRTokenReusePass
+    : public ReuseIRTokenReuseBase<ReuseIRTokenReusePass> {
+  using ReuseIRTokenReuseBase::ReuseIRTokenReuseBase;
   void runOnOperation() override final;
 };
 
-void ReuseIRPrintReuseAnalysisPass::runOnOperation() {
+void ReuseIRTokenReusePass::runOnOperation() {
   auto module = getOperation()->getParentOfType<ModuleOp>();
   DataLayout dataLayout(module);
   CompositeLayoutCache cache(dataLayout);
@@ -37,22 +40,38 @@ void ReuseIRPrintReuseAnalysisPass::runOnOperation() {
     emitError(getOperation()->getLoc(), "dataflow solver failed");
     return signalPassFailure();
   }
+  // first walk all operations:
+  // - if an operation reuses a token, add it to its token slot.
+  // - if an operation frees tokens, insert token free operations.
+  IRRewriter rewriter(&getContext());
   getOperation().walk([&](Operation *op) {
     const auto *lattice =
         solver.lookupState<dataflow::reuse_ir::ReuseLattice>(op);
     if (!lattice)
       return;
-    std::string buffer;
-    llvm::raw_string_ostream os(buffer);
-    lattice->print(os);
-    llvm::SmallVector<Attribute> types;
-    op->setAttr("reuse-analysis", StringAttr::get(op->getContext(), buffer));
+    if (dataflow::reuse_ir::ReuseKind::REUSE == lattice->getReuseKind()) {
+      auto rcCreateOp = cast<RcCreateOp>(op);
+      rcCreateOp.getTokenMutable().assign(*lattice->getTokenUsed().begin());
+    }
+    if (dataflow::reuse_ir::ReuseKind::FREE == lattice->getReuseKind()) {
+      IRRewriter::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPoint(op);
+      for (auto token : lattice->getTokenUsed()) {
+        rewriter.create<TokenFreeOp>(op->getLoc(), token);
+      }
+    }
   });
+  // Walk all blocks, if a token alive at the end of the block but it is
+  // not alive at the beginning of a successor block, insert token free at the
+  // beginning successor block. it the token does not dominate the successor
+  // block, insert an intermediate block to free the token.
+  getOperation().walk(
+      [&](Block *block) { llvm::errs() << "block: " << *block << "\n"; });
 }
 
 // NOLINTNEXTLINE(misc-use-internal-linkage)
-std::unique_ptr<Pass> createReuseIRPrintReuseAnalysisPass() {
-  return std::make_unique<ReuseIRPrintReuseAnalysisPass>();
+std::unique_ptr<Pass> createReuseIRTokenReusePass() {
+  return std::make_unique<ReuseIRTokenReusePass>();
 }
 } // namespace reuse_ir
 } // namespace mlir

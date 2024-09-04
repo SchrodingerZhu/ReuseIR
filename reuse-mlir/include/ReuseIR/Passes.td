@@ -66,4 +66,13 @@ def ReuseIRPrintReuseAnalysis : Pass<"reuse-ir-print-reuse-analysis", "::mlir::M
   let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
 }
 
+def ReuseIRTokenReuse : Pass<"reuse-ir-token-reuse", "::mlir::ModuleOp"> {
+  let summary = "Apply reuse analysis to reuse token and recyle unused tokens";
+  let description = [{
+    This pass is used to apply reuse analysis to reuse token and recyle unused tokens.
+  }];
+  let constructor = "::mlir::reuse_ir::createReuseIRTokenReusePass()";
+  let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
+}
+
 #endif // REUSE_IR_PASSES

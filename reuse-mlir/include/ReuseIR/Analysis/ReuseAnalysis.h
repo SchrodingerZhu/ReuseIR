@@ -8,6 +8,7 @@
 #include "mlir/Analysis/DataLayoutAnalysis.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
@@ -72,6 +73,7 @@ public:
 class ReuseAnalysis : public DenseForwardDataFlowAnalysis<ReuseLattice> {
 private:
   TokenHeuristic tokenHeuristic;
+  DominanceInfo &domInfo;
 #if LLVM_VERSION_MAJOR < 20
   using RetType = void;
 #else
@@ -80,7 +82,7 @@ private:
 
 public:
   ReuseAnalysis(DataFlowSolver &solver, CompositeLayoutCache &layoutCache,
-                mlir::AliasAnalysis &aliasAnalysis);
+                mlir::AliasAnalysis &aliasAnalysis, DominanceInfo &domInfo);
 
   RetType visitOperation(Operation *op, const ReuseLattice &before,
                          ReuseLattice *after) override final;

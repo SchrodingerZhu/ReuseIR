@@ -17,6 +17,7 @@ std::unique_ptr<Pass> createReuseIRExpandControlFlowPass(
 std::unique_ptr<Pass> createReuseIRAcquireReleaseFusionPass();
 std::unique_ptr<Pass> createReuseIRInferUnionTagPass();
 std::unique_ptr<Pass> createReuseIRPrintReuseAnalysisPass();
+std::unique_ptr<Pass> createReuseIRTokenReusePass();
 
 #define GEN_PASS_CLASSES
 #define GEN_PASS_REGISTRATION

@@ -61,23 +61,38 @@ ReuseAnalysis::RetType ReuseAnalysis::visitOperation(Operation *op,
 
   for (auto alive : before.getAliveToken())
     changed |= after->addAliveTokenIfNoUsed(alive);
-
-  if (auto release = dyn_cast<RcReleaseOp>(op)) {
-    if (release.getToken() && release.getToken().use_empty())
-      propagateIfChanged(
-          after, changed | after->addAliveTokenIfNoUsed(release.getToken()));
-    else
-      propagateIfChanged(after, changed);
-  }
-
-  if (isa<CallOpInterface>(op)) {
-    changed |= after->setAction(ReuseKind::FREE);
-    for (auto alive : after->getAliveToken())
-      changed |= after->addUsedToken(alive);
-    propagateIfChanged(after, changed | after->clearAliveToken());
-  }
-
   do {
+    if (auto release = dyn_cast<RcReleaseOp>(op)) {
+      if (release.getToken() && release.getToken().use_empty())
+        propagateIfChanged(
+            after, changed | after->addAliveTokenIfNoUsed(release.getToken()));
+      else
+        propagateIfChanged(after, changed);
+      break;
+    }
+
+    if (isa<CallOpInterface>(op)) {
+      changed |= after->setAction(ReuseKind::FREE);
+      for (auto alive : after->getAliveToken())
+        changed |= after->addUsedToken(alive);
+      propagateIfChanged(after, changed | after->clearAliveToken());
+      break;
+    }
+
+    // We only leave the token alive if it dominates all successors.
+    if (auto branch = dyn_cast<BranchOpInterface>(op)) {
+      for (auto alive : after->getAliveToken()) {
+        bool dominatesAll = true;
+        for (auto *succ : branch->getSuccessors())
+          if (!domInfo.dominates(op->getBlock(), succ))
+            dominatesAll = false;
+        if (!dominatesAll)
+          changed |= after->eraseAliveToken(alive);
+      }
+      propagateIfChanged(after, changed);
+      break;
+    }
+
     if (auto create = dyn_cast<RcCreateOp>(op)) {
       auto rcType = create.getType();
       if (rcType.getFreezingKind().getValue() != FreezingKind::nonfreezing)
@@ -98,6 +113,7 @@ ReuseAnalysis::RetType ReuseAnalysis::visitOperation(Operation *op,
                                       after->eraseAliveToken(reuseCandidate));
       else
         propagateIfChanged(after, changed | after->clearTokenUsed());
+      break;
     }
   } while (false);
 
@@ -233,9 +249,10 @@ bool TokenHeuristic::possiblyInplaceReallocable(size_t alignment,
 }
 ReuseAnalysis::ReuseAnalysis(DataFlowSolver &solver,
                              CompositeLayoutCache &layoutCache,
-                             mlir::AliasAnalysis &aliasAnalysis)
+                             mlir::AliasAnalysis &aliasAnalysis,
+                             DominanceInfo &domInfo)
     : DenseForwardDataFlowAnalysis(solver),
-      tokenHeuristic(layoutCache, aliasAnalysis) {}
+      tokenHeuristic(layoutCache, aliasAnalysis), domInfo(domInfo) {}
 TokenHeuristic::TokenHeuristic(CompositeLayoutCache &cache,
                                mlir::AliasAnalysis &aliasAnalysis)
     : cache(cache), aliasAnalysis(aliasAnalysis) {}

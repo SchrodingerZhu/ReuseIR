@@ -6,6 +6,7 @@ add_mlir_dialect_library(MLIRReuseIRPasses
     AcquireReleaseFusion.cpp
     InferUnionTag.cpp
     PrintReuseAnalysis.cpp
+    TokenReuse.cpp
   DEPENDS
     MLIRReuseIR
     MLIRReuseIRAnalysis
