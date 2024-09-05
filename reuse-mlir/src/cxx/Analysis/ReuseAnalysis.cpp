@@ -4,9 +4,11 @@
 #include "ReuseIR/IR/ReuseIRTypes.h"
 #include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"
 #include "mlir/Analysis/DataFlowFramework.h"
-#include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/Block.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/Operation.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
-#include <llvm-20/llvm/ADT/SmallVector.h>
 
 namespace mlir::dataflow {
 namespace reuse_ir {
@@ -14,12 +16,19 @@ namespace reuse_ir {
 void ReuseLattice::print(llvm::raw_ostream &os) const {
   {
     os << "{";
-    if (this->reuseToken)
-      os << "reuse: " << this->reuseToken << ", ";
+    if (this->reuseToken) {
+      os << "reuse: ";
+      reuseToken.printAsOperand(os, OpPrintingFlags{});
+      os << ", ";
+    }
     os << "free : [";
-    llvm::interleaveComma(this->freeToken, os);
+    llvm::interleaveComma(this->freeToken, os, [&](Value token) {
+      token.printAsOperand(os, OpPrintingFlags{});
+    });
     os << "], alive: [";
-    llvm::interleaveComma(aliveToken, os);
+    llvm::interleaveComma(aliveToken, os, [&](Value token) {
+      token.printAsOperand(os, OpPrintingFlags{});
+    });
     os << "]}";
   }
 }
@@ -67,25 +76,19 @@ ReuseAnalysis::RetType ReuseAnalysis::visitOperation(Operation *op,
   } while (false);
 
   if (op->getBlock()->getTerminator() == op) {
-    // if there is no successor, free all alive tokens
-    if (op->getBlock()->hasNoSuccessors()) {
-      freeToken = std::move(aliveToken);
-      aliveToken = {};
-    } else {
-      // if any alive token does not dominate one of the successors, free it.
-      llvm::SmallVector<Value> toFree;
-      for (auto token : aliveToken) {
-        for (auto *succ : op->getBlock()->getSuccessors()) {
-          if (!domInfo.dominates(token.getParentBlock(), succ)) {
-            toFree.push_back(token);
-            break;
-          }
+    // if any alive token does not dominate one of the successors, free it.
+    llvm::SmallVector<Value> toFree;
+    for (auto token : aliveToken) {
+      for (auto *succ : op->getBlock()->getSuccessors()) {
+        if (!domInfo.dominates(token.getParentBlock(), succ)) {
+          toFree.push_back(token);
+          break;
         }
       }
-      for (auto token : toFree) {
-        freeToken.insert(token);
-        aliveToken.erase(token);
-      }
+    }
+    for (auto token : toFree) {
+      freeToken.insert(token);
+      aliveToken.erase(token);
     }
   }
 
@@ -329,6 +332,7 @@ LogicalResult ReuseAnalysis::processOperation(
 
   // If this op implements region control-flow, then control-flow dictates its
   // transfer function.
+
   if (auto branch = dyn_cast<RegionBranchOpInterface>(op)) {
     customVisitRegionBranchOperation(op, branch, after);
     return LogicalResult::success();
@@ -343,6 +347,24 @@ LogicalResult ReuseAnalysis::processOperation(
 
   // Invoke the operation transfer function.
   return visitOperationImpl(op, *before, after);
+}
+ChangeResult ReuseLattice::setNewState(Value reuseToken,
+                                       llvm::DenseSet<Value> freeToken,
+                                       llvm::DenseSet<Value> aliveToken) {
+  auto changed = ChangeResult::NoChange;
+  if (reuseToken != this->reuseToken) {
+    this->reuseToken = std::move(reuseToken);
+    changed = ChangeResult::Change;
+  }
+  if (freeToken != this->freeToken) {
+    this->freeToken = std::move(freeToken);
+    changed = ChangeResult::Change;
+  }
+  if (aliveToken != this->aliveToken) {
+    this->aliveToken = std::move(aliveToken);
+    changed = ChangeResult::Change;
+  }
+  return changed;
 }
 } // namespace reuse_ir
 } // namespace mlir::dataflow

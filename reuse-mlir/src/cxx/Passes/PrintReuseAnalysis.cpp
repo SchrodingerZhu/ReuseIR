@@ -21,7 +21,7 @@ struct ReuseIRPrintReuseAnalysisPass
 };
 
 void ReuseIRPrintReuseAnalysisPass::runOnOperation() {
-  auto module = getOperation()->getParentOfType<ModuleOp>();
+  auto module = getOperation();
   DataLayout dataLayout(module);
   CompositeLayoutCache cache(dataLayout);
   mlir::AliasAnalysis aliasAnalysis(module);

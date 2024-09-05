@@ -17,7 +17,6 @@
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/STLExtras.h"
-#include <llvm-20/llvm/ADT/DenseSet.h>
 #include <memory>
 
 namespace mlir::dataflow {
@@ -60,16 +59,7 @@ public:
   const llvm::DenseSet<Value> &getFreeToken() const { return freeToken; }
   const llvm::DenseSet<Value> &getAliveToken() const { return aliveToken; }
   ChangeResult setNewState(Value reuseToken, llvm::DenseSet<Value> freeToken,
-                           llvm::DenseSet<Value> aliveToken) {
-    if (reuseToken != this->reuseToken || freeToken != this->freeToken ||
-        aliveToken != this->aliveToken) {
-      this->reuseToken = std::move(reuseToken);
-      this->freeToken = std::move(freeToken);
-      this->aliveToken = std::move(aliveToken);
-      return ChangeResult::Change;
-    }
-    return ChangeResult::NoChange;
-  }
+                           llvm::DenseSet<Value> aliveToken);
 };
 
 class ReuseAnalysis : public DenseForwardDataFlowAnalysis<ReuseLattice> {
