@@ -25,7 +25,7 @@ module @test  attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<f80, dense
             %tk = reuse_ir.rc.release (%list : !rclist) : !nullable
             %cons = reuse_ir.composite.assemble (%head, %acc) : (i32, !rclist) -> !cons
             %next = reuse_ir.union.assemble (0, %cons) : (!cons) -> !list
-            %res = reuse_ir.rc.create value(%next) token(%tk) : (!list, !nullable) -> !rclist
+            %res = reuse_ir.rc.create value(%next) : (!list) -> !rclist
             %recusive = func.call @reverse(%tail, %res) : (!rclist, !rclist) -> !rclist
             scf.yield %recusive : !rclist
         }

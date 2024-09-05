@@ -143,7 +143,8 @@ mlir::reuse_ir::LogicalResult ClosureYieldOp::verify() {
 template <typename EmitError>
 static LogicalResult verifyTokenForRC(Operation *op, TokenType token, RcType rc,
                                       EmitError emitOpError,
-                                      bool isReturn = false) {
+                                      bool isReturn = false,
+                                      bool allowDifferentSize = false) {
   auto module = op->getParentOfType<ModuleOp>();
   if (!module)
     return emitOpError("cannot find the module containing the operation");
@@ -152,11 +153,17 @@ static LogicalResult verifyTokenForRC(Operation *op, TokenType token, RcType rc,
                                 rc.getAtomicKind(), rc.getFreezingKind());
   auto size = dataLayout.getTypeSize(rcBoxTy);
   auto align = dataLayout.getTypeABIAlignment(rcBoxTy);
-  if (token.getAlignment() != align || token.getSize() != size)
+  if (token.getAlignment() != align)
+    return emitOpError("expected")
+           << (isReturn ? " to return " : " ")
+           << "a nullable token of alignment " << align
+           << ", but found a nullable token of alignment "
+           << token.getAlignment();
+  if (!allowDifferentSize && token.getSize() != size)
     return emitOpError("expected")
            << (isReturn ? " to return " : " ") << "a nullable token of size "
-           << size.getFixedValue() << " and alignment " << align
-           << ", but found a nullable token of type " << token;
+           << size.getFixedValue() << ", but found a nullable token of size "
+           << token.getSize();
   return success();
 }
 
@@ -245,8 +252,10 @@ mlir::reuse_ir::LogicalResult RcCreateOp::verify() {
   }
   if (auto token = getToken()) {
     auto tokenTy = cast<TokenType>(token.getType().getPointer());
-    return verifyTokenForRC(this->getOperation(), tokenTy, rcPtrTy,
-                            [&](const Twine &msg) { return emitOpError(msg); });
+    return verifyTokenForRC(
+        this->getOperation(), tokenTy, rcPtrTy,
+        [&](const Twine &msg) { return emitOpError(msg); }, /*isReturn=*/false,
+        /*allowDifferentSize=*/true);
   }
   return mlir::reuse_ir::success();
 }
