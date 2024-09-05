@@ -17,6 +17,7 @@
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/STLExtras.h"
+#include <llvm-20/llvm/ADT/DenseSet.h>
 #include <memory>
 
 namespace mlir::dataflow {
@@ -46,28 +47,30 @@ public:
   ssize_t operator()(RcCreateOp op, Value token) const;
 };
 
-enum class ReuseKind { NONE, FREE, REUSE, JOIN };
-
 class ReuseLattice : public AbstractDenseLattice {
-  ReuseKind reuseKind = ReuseKind::NONE;
-  llvm::DenseSet<Value> tokenUsed{};
+  Value reuseToken{};
+  llvm::DenseSet<Value> freeToken{};
   llvm::DenseSet<Value> aliveToken{};
+  bool notJoined = false;
 
 public:
   using AbstractDenseLattice::AbstractDenseLattice;
   ChangeResult join(const AbstractDenseLattice &rhs) override final;
   void print(llvm::raw_ostream &os) const override final;
-  ReuseKind getReuseKind() const { return reuseKind; }
-  const llvm::DenseSet<Value> &getTokenUsed() const { return tokenUsed; }
+  Value getReuseToken() const { return reuseToken; }
+  const llvm::DenseSet<Value> &getFreeToken() const { return freeToken; }
   const llvm::DenseSet<Value> &getAliveToken() const { return aliveToken; }
-  bool operator==(const ReuseLattice &rhs) const;
-  ChangeResult setAction(ReuseKind kind);
-  ChangeResult clearAliveToken();
-  ChangeResult eraseAliveToken(Value token);
-  ChangeResult clearTokenUsed();
-  ChangeResult addUsedToken(ValueRange token);
-  ChangeResult setUsedToken(Value token);
-  ChangeResult addAliveTokenIfNoUsed(ValueRange token);
+  ChangeResult setNewState(Value reuseToken, llvm::DenseSet<Value> freeToken,
+                           llvm::DenseSet<Value> aliveToken) {
+    if (reuseToken != this->reuseToken || freeToken != this->freeToken ||
+        aliveToken != this->aliveToken) {
+      this->reuseToken = std::move(reuseToken);
+      this->freeToken = std::move(freeToken);
+      this->aliveToken = std::move(aliveToken);
+      return ChangeResult::Change;
+    }
+    return ChangeResult::NoChange;
+  }
 };
 
 class ReuseAnalysis : public DenseForwardDataFlowAnalysis<ReuseLattice> {
@@ -79,6 +82,10 @@ private:
 #else
   using RetType = LogicalResult;
 #endif
+  void customVisitBlock(Block *block);
+  void customVisitRegionBranchOperation(ProgramPoint point,
+                                        RegionBranchOpInterface branch,
+                                        AbstractDenseLattice *after);
 
 public:
   ReuseAnalysis(DataFlowSolver &solver, CompositeLayoutCache &layoutCache,
@@ -87,6 +94,7 @@ public:
   RetType visitOperation(Operation *op, const ReuseLattice &before,
                          ReuseLattice *after) override final;
   void setToEntryState(ReuseLattice *lattice) override final;
+  LogicalResult visit(ProgramPoint point) override final;
 };
 } // namespace reuse_ir
 } // namespace mlir::dataflow
