@@ -11,7 +11,6 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
-#include <llvm-20/llvm/Support/raw_ostream.h>
 #include <memory>
 
 namespace mlir {
