@@ -82,9 +82,10 @@ public:
 
   RetType visitOperation(Operation *op, const ReuseLattice &before,
                          ReuseLattice *after) override final;
+  RetType success();
   void setToEntryState(ReuseLattice *lattice) override final;
   LogicalResult visit(ProgramPoint point) override final;
-  LogicalResult processOperation(Operation *op) override final;
+  RetType processOperation(Operation *op) override final;
 };
 } // namespace reuse_ir
 } // namespace mlir::dataflow

@@ -250,10 +250,17 @@ void ReuseAnalysis::customVisitBlock(Block *block) {
        it != e; ++it) {
     // Skip control edges that aren't executable.
     Block *predecessor = *it;
+#if LLVM_VERSION_MAJOR < 20
+    if (!getOrCreateFor<Executable>(
+             block, getProgramPoint<CFGEdge>(predecessor, block))
+             ->isLive())
+      continue;
+#else
     if (!getOrCreateFor<Executable>(
              block, getLatticeAnchor<CFGEdge>(predecessor, block))
              ->isLive())
       continue;
+#endif
 
     // intersect the state from the predecessor's terminator.
     const auto &before = static_cast<const ReuseLattice &>(
@@ -314,10 +321,11 @@ void ReuseAnalysis::customVisitRegionBranchOperation(
   propagateIfChanged(afterLattice,
                      afterLattice->setNewState({}, {}, aliveToken));
 }
-LogicalResult ReuseAnalysis::processOperation(
+
+ReuseAnalysis::RetType ReuseAnalysis::processOperation(
     Operation *op) { // If the containing block is not executable, bail out.
   if (!getOrCreateFor<Executable>(op, op->getBlock())->isLive())
-    return LogicalResult::success();
+    return this->success();
 
   // Get the dense lattice to update.
   ReuseLattice *after = getLattice(op);
@@ -335,14 +343,14 @@ LogicalResult ReuseAnalysis::processOperation(
 
   if (auto branch = dyn_cast<RegionBranchOpInterface>(op)) {
     customVisitRegionBranchOperation(op, branch, after);
-    return LogicalResult::success();
+    return this->success();
   }
 
   // If this is a call operation, free all reachable tokens.
   if (auto call = dyn_cast<CallOpInterface>(op)) {
     propagateIfChanged(after,
                        after->setNewState({}, before->getAliveToken(), {}));
-    return LogicalResult::success();
+    return this->success();
   }
 
   // Invoke the operation transfer function.
@@ -365,6 +373,13 @@ ChangeResult ReuseLattice::setNewState(Value reuseToken,
     changed = ChangeResult::Change;
   }
   return changed;
+}
+ReuseAnalysis::RetType ReuseAnalysis::success() {
+#if LLVM_VERSION_MAJOR < 20
+  return;
+#else
+  return LogicalResult::success();
+#endif
 }
 } // namespace reuse_ir
 } // namespace mlir::dataflow
