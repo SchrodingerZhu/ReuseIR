@@ -44,21 +44,7 @@ void ReuseIRTokenReusePass::runOnOperation() {
   // - if an operation frees tokens, insert token free operations.
   IRRewriter rewriter(&getContext());
   getOperation().walk([&](Operation *op) {
-    const auto *lattice =
-        solver.lookupState<dataflow::reuse_ir::ReuseLattice>(op);
-    if (!lattice)
-      return;
-    if (dataflow::reuse_ir::ReuseKind::REUSE == lattice->getReuseKind()) {
-      auto rcCreateOp = cast<RcCreateOp>(op);
-      rcCreateOp.getTokenMutable().assign(*lattice->getTokenUsed().begin());
-    }
-    if (dataflow::reuse_ir::ReuseKind::FREE == lattice->getReuseKind()) {
-      IRRewriter::InsertionGuard guard(rewriter);
-      rewriter.setInsertionPoint(op);
-      for (auto token : lattice->getTokenUsed()) {
-        rewriter.create<TokenFreeOp>(op->getLoc(), token);
-      }
-    }
+    // TODO
   });
   // Walk all blocks, if a token alive at the end of the block but it is
   // not alive at the beginning of a successor block, insert token free at the

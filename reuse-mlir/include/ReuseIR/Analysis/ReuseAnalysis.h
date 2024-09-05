@@ -51,7 +51,6 @@ class ReuseLattice : public AbstractDenseLattice {
   Value reuseToken{};
   llvm::DenseSet<Value> freeToken{};
   llvm::DenseSet<Value> aliveToken{};
-  bool notJoined = false;
 
 public:
   using AbstractDenseLattice::AbstractDenseLattice;
@@ -95,6 +94,7 @@ public:
                          ReuseLattice *after) override final;
   void setToEntryState(ReuseLattice *lattice) override final;
   LogicalResult visit(ProgramPoint point) override final;
+  LogicalResult processOperation(Operation *op) override final;
 };
 } // namespace reuse_ir
 } // namespace mlir::dataflow

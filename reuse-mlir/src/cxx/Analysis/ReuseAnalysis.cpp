@@ -4,6 +4,8 @@
 #include "ReuseIR/IR/ReuseIRTypes.h"
 #include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"
 #include "mlir/Analysis/DataFlowFramework.h"
+#include "mlir/IR/OpDefinition.h"
+#include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include <llvm-20/llvm/ADT/SmallVector.h>
 
 namespace mlir::dataflow {
@@ -13,7 +15,7 @@ void ReuseLattice::print(llvm::raw_ostream &os) const {
   {
     os << "{";
     if (this->reuseToken)
-      os << "reuse: " << *this->reuseToken << ", ";
+      os << "reuse: " << this->reuseToken << ", ";
     os << "free : [";
     llvm::interleaveComma(this->freeToken, os);
     os << "], alive: [";
@@ -27,75 +29,68 @@ ChangeResult ReuseLattice::join(const AbstractDenseLattice &rhs) {
 }
 
 void ReuseAnalysis::setToEntryState(ReuseLattice *lattice) {
-  llvm_unreachable("not implemented");
+  propagateIfChanged(lattice, lattice->setNewState({}, {}, {}));
 }
 
 ReuseAnalysis::RetType ReuseAnalysis::visitOperation(Operation *op,
                                                      const ReuseLattice &before,
                                                      ReuseLattice *after) {
-  // auto changed = ChangeResult::NoChange;
+  Value reuseToken{};
+  llvm::DenseSet<Value> freeToken{};
+  llvm::DenseSet<Value> aliveToken = before.getAliveToken();
+  do {
+    if (auto release = dyn_cast<RcReleaseOp>(op)) {
+      if (release.getToken() && release.getToken().use_empty())
+        aliveToken.insert(release.getToken());
+      break;
+    }
 
-  // for (auto alive : before.getAliveToken())
-  //   changed |= after->addAliveTokenIfNoUsed(alive);
-  // do {
-  //   if (auto release = dyn_cast<RcReleaseOp>(op)) {
-  //     if (release.getToken() && release.getToken().use_empty())
-  //       propagateIfChanged(
-  //           after, changed |
-  //           after->addAliveTokenIfNoUsed(release.getToken()));
-  //     else
-  //       propagateIfChanged(after, changed);
-  //     break;
-  //   }
+    if (auto create = dyn_cast<RcCreateOp>(op)) {
+      auto rcType = create.getType();
+      if (rcType.getFreezingKind().getValue() != FreezingKind::nonfreezing)
+        break;
+      Value reuseCandidate{};
+      long currentHeuristic = -10;
+      for (auto alive : aliveToken) {
+        auto heuristic = tokenHeuristic(create, alive);
+        if (!reuseCandidate || heuristic > currentHeuristic) {
+          reuseCandidate = alive;
+          currentHeuristic = heuristic;
+        }
+      }
+      // reusable
+      if (currentHeuristic >= -1)
+        reuseToken = reuseCandidate;
+      aliveToken.erase(reuseToken);
+      break;
+    }
+  } while (false);
 
-  //   if (isa<CallOpInterface>(op)) {
-  //     changed |= after->setAction(ReuseKind::FREE);
-  //     for (auto alive : after->getAliveToken())
-  //       changed |= after->addUsedToken(alive);
-  //     propagateIfChanged(after, changed | after->clearAliveToken());
-  //     break;
-  //   }
+  if (op->getBlock()->getTerminator() == op) {
+    // if there is no successor, free all alive tokens
+    if (op->getBlock()->hasNoSuccessors()) {
+      freeToken = std::move(aliveToken);
+      aliveToken = {};
+    } else {
+      // if any alive token does not dominate one of the successors, free it.
+      llvm::SmallVector<Value> toFree;
+      for (auto token : aliveToken) {
+        for (auto *succ : op->getBlock()->getSuccessors()) {
+          if (!domInfo.dominates(token.getParentBlock(), succ)) {
+            toFree.push_back(token);
+            break;
+          }
+        }
+      }
+      for (auto token : toFree) {
+        freeToken.insert(token);
+        aliveToken.erase(token);
+      }
+    }
+  }
 
-  //   // We only leave the token alive if it dominates all successors.
-  //   if (auto branch = dyn_cast<BranchOpInterface>(op)) {
-  //     for (auto alive : after->getAliveToken()) {
-  //       bool dominatesAll = true;
-  //       for (auto *succ : branch->getSuccessors())
-  //         if (!domInfo.dominates(op->getBlock(), succ))
-  //           dominatesAll = false;
-  //       if (!dominatesAll)
-  //         changed |= after->eraseAliveToken(alive) |
-  //                    after->addUsedToken(alive) |
-  //                    after->setAction(ReuseKind::FREE);
-  //     }
-  //     propagateIfChanged(after, changed);
-  //     break;
-  //   }
-
-  //   if (auto create = dyn_cast<RcCreateOp>(op)) {
-  //     auto rcType = create.getType();
-  //     if (rcType.getFreezingKind().getValue() != FreezingKind::nonfreezing)
-  //       break;
-  //     Value reuseCandidate{};
-  //     long currentHeuristic = -10;
-  //     for (auto alive : after->getAliveToken()) {
-  //       auto heuristic = tokenHeuristic(create, alive);
-  //       if (!reuseCandidate || heuristic > currentHeuristic) {
-  //         reuseCandidate = alive;
-  //         currentHeuristic = heuristic;
-  //       }
-  //     }
-  //     // reusable
-  //     if (currentHeuristic >= -1)
-  //       propagateIfChanged(after, changed |
-  //       after->setAction(ReuseKind::REUSE) |
-  //                                     after->setUsedToken(reuseCandidate) |
-  //                                     after->eraseAliveToken(reuseCandidate));
-  //     else
-  //       propagateIfChanged(after, changed | after->clearTokenUsed());
-  //     break;
-  //   }
-  // } while (false);
+  propagateIfChanged(after,
+                     after->setNewState(reuseToken, freeToken, aliveToken));
 
 #if LLVM_VERSION_MAJOR < 20
   return;
@@ -274,6 +269,7 @@ void ReuseAnalysis::customVisitBlock(Block *block) {
   }
   propagateIfChanged(after, after->setNewState({}, {}, aliveToken));
 };
+
 void ReuseAnalysis::customVisitRegionBranchOperation(
     ProgramPoint point, RegionBranchOpInterface branch,
     AbstractDenseLattice *after) {
@@ -281,7 +277,8 @@ void ReuseAnalysis::customVisitRegionBranchOperation(
   const auto *predecessors = getOrCreateFor<PredecessorState>(point, point);
   assert(predecessors->allPredecessorsKnown() &&
          "unexpected unresolved region successors");
-
+  bool initialized = false;
+  llvm::DenseSet<Value> aliveToken;
   for (Operation *op : predecessors->getKnownPredecessors()) {
     const AbstractDenseLattice *before;
     // If the predecessor is the parent, get the state before the parent.
@@ -296,39 +293,56 @@ void ReuseAnalysis::customVisitRegionBranchOperation(
       before = getLatticeFor(point, op);
     }
 
-    // This function is called in two cases:
-    //   1. when visiting the block (point = block);
-    //   2. when visiting the parent operation (point = parent op).
-    // In both cases, we are looking for predecessor operations of the point,
-    //   1. predecessor may be the terminator of another block from another
-    //   region (assuming that the block does belong to another region via an
-    //   assertion) or the parent (when parent can transfer control to this
-    //   region);
-    //   2. predecessor may be the terminator of a block that exits the
-    //   region (when region transfers control to the parent) or the operation
-    //   before the parent.
-    // In the latter case, just perform the join as it isn't the control flow
-    // affected by the region.
-    std::optional<unsigned> regionFrom =
-        op == branch ? std::optional<unsigned>()
-                     : op->getBlock()->getParent()->getRegionNumber();
-    if (auto *toBlock = point.dyn_cast<Block *>()) {
-      unsigned regionTo = toBlock->getParent()->getRegionNumber();
-      visitRegionBranchControlFlowTransfer(branch, regionFrom, regionTo,
-                                           *before, after);
+    // Intersect the state from the predecessor.
+    const auto &beforeLattice = static_cast<const ReuseLattice &>(*before);
+    if (!initialized) {
+      aliveToken = beforeLattice.getAliveToken();
+      initialized = true;
     } else {
-      assert(point.get<Operation *>() == branch &&
-             "expected to be visiting the branch itself");
-      // Only need to call the arc transfer when the predecessor is the region
-      // or the op itself, not the previous op.
-      if (op->getParentOp() == branch || op == branch) {
-        visitRegionBranchControlFlowTransfer(
-            branch, regionFrom, /*regionTo=*/std::nullopt, *before, after);
-      } else {
-        join(after, *before);
-      }
+      llvm::SmallVector<Value> toErase;
+      for (auto token : aliveToken)
+        if (!beforeLattice.getAliveToken().count(token))
+          toErase.push_back(token);
+      for (auto token : toErase)
+        aliveToken.erase(token);
     }
   }
+  auto *afterLattice = static_cast<ReuseLattice *>(after);
+  propagateIfChanged(afterLattice,
+                     afterLattice->setNewState({}, {}, aliveToken));
+}
+LogicalResult ReuseAnalysis::processOperation(
+    Operation *op) { // If the containing block is not executable, bail out.
+  if (!getOrCreateFor<Executable>(op, op->getBlock())->isLive())
+    return LogicalResult::success();
+
+  // Get the dense lattice to update.
+  ReuseLattice *after = getLattice(op);
+
+  // Get the dense state before the execution of the op.
+  const ReuseLattice *before;
+  if (Operation *prev = op->getPrevNode())
+    before = static_cast<const ReuseLattice *>(getLatticeFor(op, prev));
+  else
+    before =
+        static_cast<const ReuseLattice *>(getLatticeFor(op, op->getBlock()));
+
+  // If this op implements region control-flow, then control-flow dictates its
+  // transfer function.
+  if (auto branch = dyn_cast<RegionBranchOpInterface>(op)) {
+    customVisitRegionBranchOperation(op, branch, after);
+    return LogicalResult::success();
+  }
+
+  // If this is a call operation, free all reachable tokens.
+  if (auto call = dyn_cast<CallOpInterface>(op)) {
+    propagateIfChanged(after,
+                       after->setNewState({}, before->getAliveToken(), {}));
+    return LogicalResult::success();
+  }
+
+  // Invoke the operation transfer function.
+  return visitOperationImpl(op, *before, after);
 }
 } // namespace reuse_ir
 } // namespace mlir::dataflow
