@@ -143,8 +143,7 @@ mlir::reuse_ir::LogicalResult ClosureYieldOp::verify() {
 template <typename EmitError>
 static LogicalResult verifyTokenForRC(Operation *op, TokenType token, RcType rc,
                                       EmitError emitOpError,
-                                      bool isReturn = false,
-                                      bool allowDifferentSize = false) {
+                                      bool isReturn = false) {
   auto module = op->getParentOfType<ModuleOp>();
   if (!module)
     return emitOpError("cannot find the module containing the operation");
@@ -159,7 +158,7 @@ static LogicalResult verifyTokenForRC(Operation *op, TokenType token, RcType rc,
            << "a nullable token of alignment " << align
            << ", but found a nullable token of alignment "
            << token.getAlignment();
-  if (!allowDifferentSize && token.getSize() != size)
+  if (token.getSize() != size)
     return emitOpError("expected")
            << (isReturn ? " to return " : " ") << "a nullable token of size "
            << size.getFixedValue() << ", but found a nullable token of size "
@@ -240,6 +239,9 @@ mlir::reuse_ir::LogicalResult RcCreateOp::verify() {
     if (getRegion())
       return emitOpError("cannot have a region when creating a nonfreezing RC "
                          "pointer");
+    if (!getToken())
+      return emitOpError("must have a token when creating a nonfreezing RC "
+                         "pointer");
     break;
   case FreezingKind::unfrozen:
     if (!getRegion())
@@ -251,11 +253,9 @@ mlir::reuse_ir::LogicalResult RcCreateOp::verify() {
     break;
   }
   if (auto token = getToken()) {
-    auto tokenTy = cast<TokenType>(token.getType().getPointer());
-    return verifyTokenForRC(
-        this->getOperation(), tokenTy, rcPtrTy,
-        [&](const Twine &msg) { return emitOpError(msg); }, /*isReturn=*/false,
-        /*allowDifferentSize=*/true);
+    auto tokenTy = cast<TokenType>(token.getType());
+    return verifyTokenForRC(this->getOperation(), tokenTy, rcPtrTy,
+                            [&](const Twine &msg) { return emitOpError(msg); });
   }
   return mlir::reuse_ir::success();
 }

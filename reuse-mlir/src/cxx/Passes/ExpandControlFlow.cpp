@@ -39,9 +39,13 @@ public:
     rewriter.replaceOpWithNewOp<scf::IfOp>(
         op, isNonNull,
         [&](OpBuilder &builder, Location loc) {
-          auto coerced = builder.create<NullableCoerceOp>(
+          mlir::Value ensured = builder.create<NullableCoerceOp>(
               loc, tokenTy, op.getNullableToken());
-          builder.create<scf::YieldOp>(loc, coerced->getResults());
+          if (tokenTy.getSize() != op.getType().getSize()) {
+            assert(tokenTy.getAlignment() == op.getType().getAlignment());
+            ensured = builder.create<TokenReallocOp>(loc, tokenTy, ensured);
+          }
+          builder.create<scf::YieldOp>(loc, ensured);
         },
         [&](OpBuilder &builder, Location loc) {
           auto allocated = builder.create<TokenAllocOp>(loc, tokenTy);

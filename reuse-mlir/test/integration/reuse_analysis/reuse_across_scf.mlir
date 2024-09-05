@@ -9,8 +9,10 @@ module @test attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<f80, dense<
         } else {
           scf.yield %y : i64
         }
-        // CHECK: reuse_ir.rc.create value(%{{[0-9a-z]+}}) token(%{{[0-9a-z]+}}) : (i64, !reuse_ir.nullable<!reuse_ir.token<size : 16, alignment : 8>>) -> !reuse_ir.rc<i64, nonatomic, nonfreezing>
-        %3 = reuse_ir.rc.create value(%z) : (i64) -> !rc64
+        // CHECK:      %[[a:[a-z0-9]+]] = reuse_ir.token.ensure(%{{[a-z0-9]+}} : <!reuse_ir.token<size : 16, alignment : 8>>) : <size : 16, alignment : 8>
+        // CHECK-NEXT: %{{[a-z0-9]+}} = reuse_ir.rc.create value(%{{[a-z0-9]+}}) token(%[[a]]) : (i64, !reuse_ir.token<size : 16, alignment : 8>) -> !reuse_ir.rc<i64, nonatomic, nonfreezing>
+        %tk = reuse_ir.token.alloc : !reuse_ir.token<size: 16, alignment: 8>
+        %3 = reuse_ir.rc.create value(%z) token(%tk) : (i64, !reuse_ir.token<size: 16, alignment: 8>) -> !rc64
         return %3 : !rc64
     }
 

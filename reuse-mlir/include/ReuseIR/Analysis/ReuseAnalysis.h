@@ -24,7 +24,6 @@ namespace reuse_ir {
 using namespace mlir::reuse_ir;
 class TokenHeuristic {
 private:
-  CompositeLayoutCache &cache;
   mlir::AliasAnalysis &aliasAnalysis;
 
 private:
@@ -40,10 +39,9 @@ private:
                                   size_t newSize) const;
 
 public:
-  TokenHeuristic(CompositeLayoutCache &cache,
-                 mlir::AliasAnalysis &aliasAnalysis);
+  TokenHeuristic(mlir::AliasAnalysis &aliasAnalysis);
 
-  ssize_t operator()(RcCreateOp op, Value token) const;
+  ssize_t operator()(TokenAllocOp op, Value token) const;
 };
 
 class ReuseLattice : public AbstractDenseLattice {
@@ -77,8 +75,8 @@ private:
                                         AbstractDenseLattice *after);
 
 public:
-  ReuseAnalysis(DataFlowSolver &solver, CompositeLayoutCache &layoutCache,
-                mlir::AliasAnalysis &aliasAnalysis, DominanceInfo &domInfo);
+  ReuseAnalysis(DataFlowSolver &solver, mlir::AliasAnalysis &aliasAnalysis,
+                DominanceInfo &domInfo);
 
   RetType visitOperation(Operation *op, const ReuseLattice &before,
                          ReuseLattice *after) override final;

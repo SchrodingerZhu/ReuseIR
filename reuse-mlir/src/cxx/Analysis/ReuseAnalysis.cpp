@@ -54,14 +54,11 @@ ReuseAnalysis::RetType ReuseAnalysis::visitOperation(Operation *op,
       break;
     }
 
-    if (auto create = dyn_cast<RcCreateOp>(op)) {
-      auto rcType = create.getType();
-      if (rcType.getFreezingKind().getValue() != FreezingKind::nonfreezing)
-        break;
+    if (auto alloc = dyn_cast<TokenAllocOp>(op)) {
       Value reuseCandidate{};
       long currentHeuristic = -10;
       for (auto alive : aliveToken) {
-        auto heuristic = tokenHeuristic(create, alive);
+        auto heuristic = tokenHeuristic(alloc, alive);
         if (!reuseCandidate || heuristic > currentHeuristic) {
           reuseCandidate = alive;
           currentHeuristic = heuristic;
@@ -102,22 +99,24 @@ ReuseAnalysis::RetType ReuseAnalysis::visitOperation(Operation *op,
 #endif
 }
 
-ssize_t TokenHeuristic::operator()(RcCreateOp op, Value token) const {
-  auto type = op.getType();
+ssize_t TokenHeuristic::operator()(TokenAllocOp op, Value token) const {
   auto nullableTy = cast<NullableType>(token.getType());
   auto tokenTy = cast<TokenType>(nullableTy.getPointer());
-  auto rcBoxTy = RcBoxType::get(type.getContext(), type.getPointee(),
-                                type.getAtomicKind(), type.getFreezingKind());
-  const auto &layout = cache.get(rcBoxTy);
-  if (layout.getAlignment() != tokenTy.getAlignment())
+  auto targetTy = op.getType();
+  if (tokenTy.getAlignment() != targetTy.getAlignment())
     return -2;
-  if (layout.getSize() != tokenTy.getSize())
-    return possiblyInplaceReallocable(layout.getAlignment().value(),
-                                      tokenTy.getSize(), layout.getSize())
+  if (tokenTy.getSize() != targetTy.getSize())
+    return possiblyInplaceReallocable(tokenTy.getAlignment(), tokenTy.getSize(),
+                                      targetTy.getSize())
                ? -1
                : -2;
-  return similarity(token, op);
+  if (op->hasOneUse()) {
+    if (auto rcCreateOp = dyn_cast<RcCreateOp>(*op->user_begin()))
+      return similarity(token, rcCreateOp);
+  }
+  return 0;
 }
+
 long TokenHeuristic::similarity(Value token, RcCreateOp op) const {
   auto rcReleaseOp = dyn_cast_or_null<RcReleaseOp>(token.getDefiningOp());
   if (!rcReleaseOp)
@@ -178,14 +177,12 @@ bool TokenHeuristic::possiblyInplaceReallocable(size_t alignment,
   return newExpMand == oldExpMand;
 }
 ReuseAnalysis::ReuseAnalysis(DataFlowSolver &solver,
-                             CompositeLayoutCache &layoutCache,
                              mlir::AliasAnalysis &aliasAnalysis,
                              DominanceInfo &domInfo)
-    : DenseForwardDataFlowAnalysis(solver),
-      tokenHeuristic(layoutCache, aliasAnalysis), domInfo(domInfo) {}
-TokenHeuristic::TokenHeuristic(CompositeLayoutCache &cache,
-                               mlir::AliasAnalysis &aliasAnalysis)
-    : cache(cache), aliasAnalysis(aliasAnalysis) {}
+    : DenseForwardDataFlowAnalysis(solver), tokenHeuristic(aliasAnalysis),
+      domInfo(domInfo) {}
+TokenHeuristic::TokenHeuristic(mlir::AliasAnalysis &aliasAnalysis)
+    : aliasAnalysis(aliasAnalysis) {}
 
 LogicalResult ReuseAnalysis::visit(ProgramPoint point) {
   if (auto *op = llvm::dyn_cast_if_present<Operation *>(point)) {

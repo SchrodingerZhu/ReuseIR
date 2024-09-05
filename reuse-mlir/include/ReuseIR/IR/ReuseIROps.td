@@ -77,7 +77,7 @@ def TokenEnsureOp : ReuseIR_Op<"token.ensure"> {
     the nullability and allocate memory on need.
   }];
   let results = (outs Res<ReuseIR_TokenType, "output token", [MemAlloc<DefaultResource>]>:$result);
-  let arguments = (ins Arg<ReuseIR_NullableToken, "input token">:$nullableToken);
+  let arguments = (ins Arg<ReuseIR_NullableToken, "input token", [MemFree<DefaultResource>]>:$nullableToken);
   let assemblyFormat = [{
     `(` $nullableToken `:` type($nullableToken) `)` attr-dict `:` type($result)
   }];
@@ -91,9 +91,9 @@ def TokenReallocOp : ReuseIR_Op<"token.realloc"> {
     allocator to avoid memcpy if the content is not to be retained.
   }];
   let results = (outs Res<ReuseIR_TokenType, "output token", [MemAlloc<DefaultResource>]>:$result);
-  let arguments = (ins Arg<ReuseIR_NullableToken, "input token">:$nullableToken);
+  let arguments = (ins Arg<ReuseIR_TokenType, "input token", [MemFree<DefaultResource>]>:$token);
   let assemblyFormat = [{
-    `(` $nullableToken `:` type($nullableToken) `)` attr-dict `->` type($result)
+    `(` $token `:` type($token) `)` attr-dict `->` type($result)
   }];
 }
 
@@ -471,7 +471,7 @@ def RcCreateOp : ReuseIR_Op<"rc.create", [AttrSizedOperandSegments]> {
   let results = (outs Res<ReuseIR_RcType, "Rc Object", [MemAlloc<DefaultResource>]>:$rc);
   let arguments = (ins 
     AnyType:$value, 
-    Optional<ReuseIR_NullableToken>:$token,
+    Optional<ReuseIR_TokenType>:$token,
     Optional<ReuseIR_RegionCtxType>:$region
   );
   let assemblyFormat = [{

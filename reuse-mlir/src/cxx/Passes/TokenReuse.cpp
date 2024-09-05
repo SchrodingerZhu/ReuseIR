@@ -26,16 +26,13 @@ struct ReuseIRTokenReusePass
 
 void ReuseIRTokenReusePass::runOnOperation() {
   auto module = getOperation();
-  DataLayout dataLayout(module);
-  CompositeLayoutCache cache(dataLayout);
   mlir::AliasAnalysis aliasAnalysis(module);
   DominanceInfo dominanceInfo(module);
   aliasAnalysis.addAnalysisImplementation<mlir::reuse_ir::AliasAnalysis>({});
   auto config = DataFlowConfig().setInterprocedural(false);
   DataFlowSolver solver(config);
   solver.load<dataflow::DeadCodeAnalysis>();
-  solver.load<dataflow::reuse_ir::ReuseAnalysis>(cache, aliasAnalysis,
-                                                 dominanceInfo);
+  solver.load<dataflow::reuse_ir::ReuseAnalysis>(aliasAnalysis, dominanceInfo);
   solver.load<dataflow::SparseConstantPropagation>();
   if (failed(solver.initializeAndRun(getOperation()))) {
     emitError(getOperation()->getLoc(), "dataflow solver failed");
@@ -51,9 +48,13 @@ void ReuseIRTokenReusePass::runOnOperation() {
         solver.lookupState<dataflow::reuse_ir::ReuseLattice>(op);
     if (!lattice)
       return;
-    if (auto rcCreateOp = dyn_cast<RcCreateOp>(op)) {
-      if (lattice->getReuseToken())
-        rcCreateOp.getTokenMutable().assign(lattice->getReuseToken());
+
+    if (auto alloc = dyn_cast<TokenAllocOp>(op)) {
+      if (lattice->getReuseToken()) {
+        rewriter.setInsertionPoint(op);
+        rewriter.replaceOpWithNewOp<TokenEnsureOp>(alloc, alloc.getType(),
+                                                   lattice->getReuseToken());
+      }
     }
 
     for (auto toFree : lattice->getFreeToken()) {

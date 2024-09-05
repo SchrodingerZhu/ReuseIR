@@ -22,16 +22,13 @@ struct ReuseIRPrintReuseAnalysisPass
 
 void ReuseIRPrintReuseAnalysisPass::runOnOperation() {
   auto module = getOperation();
-  DataLayout dataLayout(module);
-  CompositeLayoutCache cache(dataLayout);
   mlir::AliasAnalysis aliasAnalysis(module);
   DominanceInfo dominanceInfo(module);
   aliasAnalysis.addAnalysisImplementation<mlir::reuse_ir::AliasAnalysis>({});
   auto config = DataFlowConfig().setInterprocedural(false);
   DataFlowSolver solver(config);
   solver.load<dataflow::DeadCodeAnalysis>();
-  solver.load<dataflow::reuse_ir::ReuseAnalysis>(cache, aliasAnalysis,
-                                                 dominanceInfo);
+  solver.load<dataflow::reuse_ir::ReuseAnalysis>(aliasAnalysis, dominanceInfo);
   solver.load<dataflow::SparseConstantPropagation>();
   if (failed(solver.initializeAndRun(getOperation()))) {
     emitError(getOperation()->getLoc(), "dataflow solver failed");
