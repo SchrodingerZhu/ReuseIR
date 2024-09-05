@@ -6,6 +6,7 @@
 #include "ReuseIR/Passes.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -35,8 +36,7 @@ class ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
                         func::FuncOp lambdaFuncOp, RefType argPackRefTy,
                         FreezingKindAttr nonfreezing) const {
     mlir::OpBuilder::InsertionGuard guard(rewriter);
-    Block *funcOpBlock = rewriter.createBlock(&lambdaFuncOp.getFunctionBody());
-    auto arg = funcOpBlock->addArgument(argPackRefTy, op.getLoc());
+    Block *funcOpBlock = lambdaFuncOp.addEntryBlock();
     rewriter.setInsertionPointToStart(funcOpBlock);
     llvm::SmallVector<Value> args;
     std::transform(
@@ -44,7 +44,8 @@ class ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
         std::back_inserter(args), [&](const mlir::BlockArgument &innerArg) {
           mlir::Value ref = rewriter.create<ProjOp>(
               op->getLoc(),
-              RefType::get(getContext(), innerArg.getType(), nonfreezing), arg,
+              RefType::get(getContext(), innerArg.getType(), nonfreezing),
+              funcOpBlock->getArgument(0),
               rewriter.getIndexAttr(innerArg.getArgNumber()));
           mlir::Value loaded =
               rewriter.create<LoadOp>(op->getLoc(), innerArg.getType(), ref);
@@ -59,6 +60,37 @@ class ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
       if (auto yield = dyn_cast_or_null<ClosureYieldOp>(block.getTerminator()))
         rewriter.replaceOpWithNewOp<func::ReturnOp>(yield,
                                                     yield->getOperands());
+  }
+
+  void emitOutlinedDrop(ClosureNewOp op, PatternRewriter &rewriter,
+                        func::FuncOp dropFunc, RefType argPackRefTy,
+                        FreezingKindAttr nonfreezing) const {
+    mlir::OpBuilder::InsertionGuard guard(rewriter);
+    auto *entryBlock = dropFunc.addEntryBlock();
+    auto argPackTy = cast<CompositeType>(argPackRefTy.getPointee());
+    auto argPackLayout = argPackTy.getCompositeLayout(dataLayout);
+    auto refToArgPack = entryBlock->getArgument(0);
+    auto appliedByteOffset = entryBlock->getArgument(1);
+    rewriter.setInsertionPointToStart(entryBlock);
+    for (auto [idx, ty] : llvm::enumerate(argPackTy.getInnerTypes())) {
+      if (ty.isIntOrIndexOrFloat())
+        continue;
+      auto offset = argPackLayout.getField(idx).byteOffset;
+      auto offsetVal =
+          rewriter.create<arith::ConstantIndexOp>(op->getLoc(), offset);
+      auto greaterThan = rewriter.create<arith::CmpIOp>(
+          op->getLoc(), arith::CmpIPredicate::ugt, appliedByteOffset,
+          offsetVal);
+      rewriter.create<mlir::scf::IfOp>(
+          op->getLoc(), greaterThan, [&](OpBuilder &builder, Location loc) {
+            auto proj = builder.create<ProjOp>(
+                loc, RefType::get(getContext(), ty, nonfreezing), refToArgPack,
+                builder.getIndexAttr(idx));
+            builder.create<DestroyOp>(loc, proj, IntegerAttr{});
+            builder.create<mlir::scf::YieldOp>(loc);
+          });
+    }
+    rewriter.create<func::ReturnOp>(op->getLoc());
   }
 
 public:
@@ -111,6 +143,7 @@ public:
     lambdaCloneOp.setPrivate();
     lambdaDropOp.setPrivate();
     emitOutlinedFunc(op, rewriter, lambdaFuncOp, argPackRefTy, nonfreezing);
+    emitOutlinedDrop(op, rewriter, lambdaDropOp, argPackRefTy, nonfreezing);
     // TODO: emit clone and drop functions
     rewriter.create<ClosureVTableOp>(op->getLoc(), lambdaVtableName,
                                      op.getClosureType(), lambdaFuncName,
