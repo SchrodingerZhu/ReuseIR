@@ -191,7 +191,7 @@ LogicalResult ReuseAnalysis::visit(ProgramPoint point) {
   if (auto *op = llvm::dyn_cast_if_present<Operation *>(point)) {
 #if LLVM_VERSION_MAJOR < 20
     processOperation(op);
-    return this->success();
+    return LogicalResult::success();
 #else
     return processOperation(op);
 #endif
