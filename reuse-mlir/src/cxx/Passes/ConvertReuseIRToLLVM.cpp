@@ -20,6 +20,7 @@
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <llvm-20/llvm/Support/raw_ostream.h>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -143,6 +144,13 @@ public:
   }
 };
 
+static Value foldUnrealizedCast(Value value) {
+  while (auto castOp = value.getDefiningOp<UnrealizedConversionCastOp>()) {
+    value = castOp.getOperand(0);
+  }
+  return value;
+}
+
 class RcCreateOpLowering
     : public ReuseIRConvPatternWithLayoutCache<RcCreateOp> {
 public:
@@ -159,7 +167,9 @@ public:
                                   rcTy.getAtomicKind(), rcTy.getFreezingKind());
     const auto &layout = cache.get(rcBoxTy);
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
-    auto convertedRcBoxTy = typeConverter->convertType(rcBoxTy);
+    auto convertedRcBoxTy = layout.getLLVMType(getLLVMTypeConverter());
+    auto dataAreaTy = convertedRcBoxTy.getTypeAtIndex(
+        rewriter.getI32IntegerAttr(layout.getField(1).index));
     auto counterPtr = rewriter.create<LLVM::GEPOp>(
         op->getLoc(), ptrTy, convertedRcBoxTy, adaptor.getToken(),
         ArrayRef<LLVM::GEPArg>{0, 0});
@@ -171,9 +181,20 @@ public:
     rewriter.create<LLVM::StoreOp>(
         op->getLoc(), one, counterPtr,
         cache.getDataLayout().getTypeABIAlignment(counterTy));
-    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getValue(), valuePtr,
-                                   cache.getDataLayout().getTypeABIAlignment(
-                                       adaptor.getValue().getType()));
+    // if we know previous value is loaded, we can optimize it to use inline
+    // memcpy
+    if (auto load = dyn_cast_or_null<LLVM::LoadOp>(
+            foldUnrealizedCast(adaptor.getValue()).getDefiningOp())) {
+      rewriter.create<LLVM::MemcpyInlineOp>(
+          op->getLoc(), valuePtr, load.getAddr(),
+          rewriter.getI64IntegerAttr(
+              cache.getDataLayout().getTypeSize(dataAreaTy)),
+          false);
+    } else {
+      rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getValue(), valuePtr,
+                                     cache.getDataLayout().getTypeABIAlignment(
+                                         adaptor.getValue().getType()));
+    }
     rewriter.replaceOp(op, adaptor.getToken());
     return mlir::reuse_ir::success();
   }
@@ -192,27 +213,28 @@ public:
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto one = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), getLLVMTypeConverter().getIndexType(), 1);
-    auto convertedUnionTy = layout.getLLVMType(getLLVMTypeConverter());
-    auto dataAreaTy = convertedUnionTy.getTypeAtIndex(
-        rewriter.getI32IntegerAttr(layout.getField(1).index));
+    auto convertedUnionTy = typeConverter->convertType(unionTy);
     auto alloca =
-        rewriter.create<LLVM::AllocaOp>(op->getLoc(), ptrTy, dataAreaTy, one,
-                                        layout.getField(1).alignment.value());
+        rewriter.create<LLVM::AllocaOp>(op->getLoc(), ptrTy, convertedUnionTy,
+                                        one, layout.getAlignment().value());
+    auto tagPtr =
+        rewriter.create<LLVM::GEPOp>(op->getLoc(), ptrTy, convertedUnionTy,
+                                     alloca, ArrayRef<LLVM::GEPArg>{0, 0});
     auto tagType = detail::UnionTypeImpl::getTagType(getContext(),
                                                      unionTy.getInnerTypes());
+    auto dataPtr = rewriter.create<LLVM::GEPOp>(
+        op->getLoc(), ptrTy, convertedUnionTy, alloca,
+        ArrayRef<LLVM::GEPArg>{0, layout.getField(1).index});
     auto tagConst = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), tagType, op.getTag().getZExtValue());
-    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getField(), alloca,
-                                   layout.getField(1).alignment.value());
-    auto dataVal = rewriter.create<LLVM::LoadOp>(
-        op->getLoc(), dataAreaTy, alloca, layout.getField(1).alignment.value());
-    Value unionVal =
-        rewriter.create<LLVM::UndefOp>(op->getLoc(), convertedUnionTy);
-    unionVal = rewriter.create<LLVM::InsertValueOp>(
-        op->getLoc(), unionVal, tagConst, layout.getField(0).index);
-    unionVal = rewriter.create<LLVM::InsertValueOp>(
-        op->getLoc(), unionVal, dataVal, layout.getField(1).index);
-    rewriter.replaceOp(op, unionVal);
+    rewriter.create<LLVM::StoreOp>(
+        op->getLoc(), tagConst, tagPtr,
+        cache.getDataLayout().getTypeABIAlignment(tagType));
+    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getField(), dataPtr,
+                                   cache.getDataLayout().getTypeABIAlignment(
+                                       adaptor.getField().getType()));
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, convertedUnionTy, alloca,
+                                              layout.getAlignment().value());
     return mlir::reuse_ir::success();
   }
 };
