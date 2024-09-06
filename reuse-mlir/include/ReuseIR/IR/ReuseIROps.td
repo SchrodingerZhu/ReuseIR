@@ -310,9 +310,24 @@ def DestroyOp : ReuseIR_Op<"destroy"> {
   let assemblyFormat = [{
     `(` $object `:` type($object) `)` (`tag` `(` $tag^ `)`)? attr-dict
   }];
-  
-  // TODO: add verifier
-  let hasVerifier = 0;
+}
+
+def CloneOp : ReuseIR_Op<"clone"> {
+  let summary = "Make sure the object behind the reference can be value-copied";
+  let description = [{
+    `reuse_ir.clone` applies shadow copy to the object behind the reference. That is,
+    it will increase the reference count of sub fields if necessary.
+  }];
+
+  // TODO: Add type restrictions
+  let arguments = (ins 
+    Arg<ReuseIR_RefType, "clonable object", [MemRead, MemAlloc<DefaultResource>]>:$object,
+    OptionalAttr<IndexAttr>:$tag
+  );
+
+  let assemblyFormat = [{
+    `(` $object `:` type($object) `)` (`tag` `(` $tag^ `)`)? attr-dict
+  }];
 }
 
 def UnionGetTagOp : ReuseIR_Op<"union.get_tag"> {
