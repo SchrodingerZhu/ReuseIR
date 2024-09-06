@@ -20,7 +20,6 @@
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <llvm-20/llvm/Support/raw_ostream.h>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -151,6 +150,21 @@ static Value foldUnrealizedCast(Value value) {
   return value;
 }
 
+static void assumeAlignment(Value ptr, size_t alignment, OpBuilder &builder,
+                            const LLVMTypeConverter &typeConverter) {
+  auto alignmentMask = builder.create<LLVM::ConstantOp>(
+      ptr.getLoc(), typeConverter.getIndexType(), alignment - 1);
+  auto ptrToInt = builder.create<LLVM::PtrToIntOp>(
+      ptr.getLoc(), typeConverter.getIndexType(), ptr);
+  auto andOp =
+      builder.create<LLVM::AndOp>(ptr.getLoc(), ptrToInt, alignmentMask);
+  auto zero = builder.create<LLVM::ConstantOp>(ptr.getLoc(),
+                                               alignmentMask.getType(), 0);
+  auto eqOp = builder.create<LLVM::ICmpOp>(
+      ptr.getLoc(), LLVM::ICmpPredicate::eq, andOp, zero);
+  builder.create<LLVM::AssumeOp>(ptr.getLoc(), eqOp);
+}
+
 class RcCreateOpLowering
     : public ReuseIRConvPatternWithLayoutCache<RcCreateOp> {
 public:
@@ -176,6 +190,9 @@ public:
     auto valuePtr = rewriter.create<LLVM::GEPOp>(
         op->getLoc(), ptrTy, convertedRcBoxTy, adaptor.getToken(),
         ArrayRef<LLVM::GEPArg>{0, layout.getField(1).index});
+    auto alignment = layout.getField(1).alignment;
+    assumeAlignment(valuePtr, alignment.value(), rewriter,
+                    getLLVMTypeConverter());
     auto counterTy = getLLVMTypeConverter().getIndexType();
     auto one = rewriter.create<LLVM::ConstantOp>(op->getLoc(), counterTy, 1);
     rewriter.create<LLVM::StoreOp>(
