@@ -75,7 +75,8 @@ void ReuseIRTokenReusePass::runOnOperation() {
         rewriter.setInsertionPoint(op);
         rewriter.create<TokenFreeOp>(token.getLoc(), token);
       }
-    } else if (op->hasTrait<OpTrait::IsTerminator>()) {
+    } else if (op->hasTrait<OpTrait::IsTerminator>() &&
+               op->getBlock()->hasNoSuccessors()) {
       // For normal terminator, free all alive tokens
       for (auto token : lattice->getAliveToken()) {
         rewriter.setInsertionPoint(op);
