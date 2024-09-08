@@ -8,3 +8,8 @@ endfunction()
 
 add_mlir_type_interface(ReuseIRMangleInterface)
 add_mlir_type_interface(ReuseIRCompositeLayoutInterface)
+
+add_reuseir_mlir_doc(ReuseIRMangleInterface ReuseIRMangleInterface
+    ./ --gen-type-interface-docs)
+add_reuseir_mlir_doc(ReuseIRCompositeLayoutInterface ReuseIRCompositeLayoutInterface
+    ./ --gen-type-interface-docs)

@@ -1,0 +1,54 @@
+name: Build
+on: [push, pull_request]
+jobs:
+  build-deploy:
+    strategy:
+      matrix:
+        version: [20]
+    env:
+      MLIR_DIR: /usr/lib/llvm-${{matrix.version}}/lib/cmake/mlir/
+      LLVM_DIR: /usr/lib/llvm-${{matrix.version}}/
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM
+        run: |
+            wget https://apt.llvm.org/llvm.sh
+            chmod +x llvm.sh
+            sudo ./llvm.sh ${{matrix.version}} all
+            sudo apt-get install -y mlir-${{matrix.version}}-tools libmlir-${{matrix.version}}-dev ninja-build cmake libllvm${{matrix.version}}
+            ## Fix LLVM issues
+            sudo sed -i 's/libLLVM.so.1/libLLVM.so/g' /usr/lib/llvm-${{matrix.version}}/lib/cmake/llvm/LLVMExports-relwithdebinfo.cmake
+            sudo touch "/usr/lib/llvm-${{matrix.version}}/lib/libLibcTableGenUtil.a"
+
+      - name: Build ReuseIR code documentation
+        run: |
+            cmake -S reuse-mlir -B build -GNinja
+            cmake --build build --target reuseir-doc
+
+      - name: Install code documentation
+        run: reuse-www/reuse-www-helper.sh --install-code-docs build reuse-www
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: '0.119.0'
+          extended: false
+
+      - name: Build website
+        run: |
+            cd reuse-www
+            hugo --minify -d ./public
+
+      - name: Deploy website
+        uses: peaceiris/actions-gh-pages@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./reuse-www/public
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
