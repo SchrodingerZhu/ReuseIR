@@ -7,6 +7,7 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/IR/Value.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
@@ -206,10 +207,21 @@ mlir::reuse_ir::LogicalResult CompositeAssembleOp::verify() {
   if (compositeTy.getInnerTypes().size() != getNumOperands())
     return emitOpError("the number of operands must match the number of "
                        "fields in the composite type");
-  for (size_t i = 0; i < getNumOperands(); ++i)
+  for (size_t i = 0; i < getNumOperands(); ++i) {
+    if (auto mrefTy = dyn_cast<MRefType>(compositeTy.getInnerTypes()[i])) {
+      auto rcTy = RcType::get(
+          getContext(), mrefTy.getPointee(), mrefTy.getAtomicKind(),
+          FreezingKindAttr::get(getContext(), FreezingKind::unfrozen));
+      auto nullableTy = NullableType::get(getContext(), rcTy);
+      if (getOperand(i).getType() != nullableTy)
+        return emitOpError("the type of operand #")
+               << i << " must be " << nullableTy;
+      continue;
+    }
     if (getOperand(i).getType() != compositeTy.getInnerTypes()[i])
       return emitOpError("the type of operand #")
              << i << " must match the type of the field in the composite type";
+  }
   return mlir::reuse_ir::success();
 }
 
@@ -273,6 +285,81 @@ template <StringLiteral Literal> struct PrintKeywordAsUnitAttr {
       printer.printKeywordOrString(Literal);
   }
 };
+
+// RegionRunOp (RegionBranchOpInterface)
+void RegionRunOp::getSuccessorRegions(
+    RegionBranchPoint point, SmallVectorImpl<RegionSuccessor> &regions) {
+  // If the predecessor is the ExecuteRegionOp, branch into the body.
+  if (point.isParent()) {
+    regions.push_back(RegionSuccessor(&getBody()));
+    return;
+  }
+  // Otherwise, the region branches back to the parent operation.
+  regions.push_back(RegionSuccessor(getResults()));
+}
+// RegionRunOp verification
+mlir::LogicalResult RegionRunOp::verify() {
+  // The region cannot be nested inside a region directly.
+  // The region must contains MLIR region whose argument is a RegionCtxType.
+  if (this->getOperation()->getParentOfType<RegionRunOp>())
+    return emitOpError("cannot be directly nested inside a region");
+  if (this->getBody().getArguments().size() != 1)
+    return emitOpError("must have exactly one argument");
+  if (!isa<RegionCtxType>(this->getBody().getArgument(0).getType()))
+    return emitOpError("the argument must be of type RegionCtxType");
+  return mlir::success();
+}
+
+mlir::LogicalResult RegionYieldOp::verify() {
+  // If the parent operation has a return type, the operation must yield a value
+  // of the same type. Otherwise, the operation must not yield a value.
+  RegionRunOp parentOp = getParentOp();
+  if (auto result = parentOp.getResult()) {
+    if (!getValue())
+      return emitOpError("must yield a value");
+    if (getValue().getType() != result.getType())
+      return emitOpError("expected to yield a value of ")
+             << result.getType() << ", but found a value of "
+             << getValue().getType();
+    if (auto rcTy = dyn_cast<RcType>(getValue().getType())) {
+      if (rcTy.getFreezingKind().getValue() == FreezingKind::unfrozen)
+        return emitOpError(
+            "cannot have an unfrozen RC pointer escaped from the region");
+    }
+  } else if (getValue())
+    return emitOpError("cannot yield a value when the parent operation does "
+                       "not have a return type");
+  return mlir::success();
+}
+
+// MRefAssignOp verification
+mlir::LogicalResult MRefAssignOp::verify() {
+  auto rcTy = dyn_cast<RcType>(getValue().getType().getPointer());
+  if (!rcTy || rcTy.getFreezingKind().getValue() != FreezingKind::unfrozen)
+    return emitOpError(
+        "the value for assignment must be an unfrozen RC pointer");
+  auto mrefTy = dyn_cast<MRefType>(getRefOfMRef().getType().getPointee());
+  if (!mrefTy)
+    return emitOpError("the reference must be pointing to a MRefType");
+  if (mrefTy.getPointee() != rcTy.getPointee())
+    return emitOpError("the pointee type of the reference must match the "
+                       "pointee type of the value");
+  return mlir::success();
+}
+
+// RcFreezeOp verification
+mlir::LogicalResult RcFreezeOp::verify() {
+  RcType rcPtrTy = getRcPtr().getType();
+  if (rcPtrTy.getFreezingKind().getValue() != FreezingKind::unfrozen)
+    return emitOpError("can only be applied to an unfrozen RC pointer");
+  if (rcPtrTy.getPointee() != getType().getPointee() ||
+      rcPtrTy.getAtomicKind() != getType().getAtomicKind())
+    return emitOpError("must return a RC pointer with the same pointee type "
+                       "and atomic kind as the input");
+  if (getType().getFreezingKind().getValue() != FreezingKind::frozen)
+    return emitOpError("must return a frozen RC pointer");
+  return mlir::success();
+}
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 

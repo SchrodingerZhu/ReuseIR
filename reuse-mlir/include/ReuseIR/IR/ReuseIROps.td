@@ -498,4 +498,67 @@ def RcCreateOp : ReuseIR_Op<"rc.create", [AttrSizedOperandSegments]> {
   let hasVerifier = 1;
 }
 
+def RegionRunOp : ReuseIR_Op<"region.run", [DeclareOpInterfaceMethods<RegionBranchOpInterface>]> {
+  let summary = "Create a new region";
+  let description = [{
+    `reuse_ir.region.run` creates a new region.
+  }];
+  let results = (outs Res<Optional<AnyType>, "Result">:$result);
+  let regions = (region MinSizedRegion<1>:$body);
+  let assemblyFormat = [{
+    ($body^)? attr-dict (`:` type($result)^)?
+  }];
+  let hasVerifier = 1;
+}
+
+def RegionYieldOp : ReuseIR_Op<"region.yield", [
+    ReturnLike, 
+    Terminator,
+    ParentOneOf<["::mlir::reuse_ir::RegionRunOp"]>]> {
+  let summary = "Yield region return value";
+  let description = [{
+    `region.yield` yields the return value of the region.
+    This serves as the terminator of the region body. When a region exists, all objects 
+    are scanned from the tail pointer. The freeze operation serves as a marking process. 
+    All other regional objects that are not marked are recycled.
+  }];
+
+  let arguments = (ins AnyType:$value);
+
+  let assemblyFormat = [{
+   $value attr-dict `:` type($value)
+  }];
+  let hasVerifier = 1;
+}
+
+def MRefAssignOp : ReuseIR_Op<"mref.assign"> {
+  let summary = "Assign a value to a mutable reference";
+  let description = [{
+    `reuse_ir.mref.assign` assigns a value to a mutable reference.
+  }];
+  let arguments = (ins 
+    Arg<ReuseIR_RefTypeOf<[ReuseIR_MRefType]>, "target mref pointer", [MemWrite]>:$refOfMRef, 
+    ReuseIR_NullableType:$value
+  );
+  let assemblyFormat = [{
+    $value `to` $refOfMRef attr-dict `:` type($value) `,` type($refOfMRef)
+  }];
+  let hasVerifier = 1;
+}
+
+def RcFreezeOp : ReuseIR_Op<"rc.freeze"> {
+  let summary = "Freeze the Rc object";
+  let description = [{
+    `reuse_ir.rc.freeze` freezes the Rc object. Limited by the control flow interface of the MLIR, the RegionYieldOp must have consistent type
+    with its parent RegionRunOp. Hence, we cannot automatically freeze the Rc object. This operation serves a marker for such conversion. It is up to
+    the user to make sure that this operation is applied only for the use of yielding the Rc object. Object after being frozen shall not be modified.
+  }];
+  let arguments = (ins ReuseIR_RcType:$rcPtr);
+  let results = (outs Res<ReuseIR_RcType, "Frozen Rc Object">:$result);
+  let assemblyFormat = [{
+    `(` $rcPtr `:` type($rcPtr) `)` attr-dict `:` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
 #endif // REUSE_IR_OPS
