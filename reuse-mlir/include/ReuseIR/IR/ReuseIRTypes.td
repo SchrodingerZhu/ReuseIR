@@ -65,6 +65,10 @@ def ReuseIR_RegionCtxType : ReuseIR_Type<"RegionCtx", "region_ctx",
   let description = [{
     `reuse_ir.region_ctx` is used to track mutable subregions.
     It contains the root for regional garbage collection.
+    Region {
+      FreezableRcHeader* tail;
+    }
+    RegionCtx is a pointer to Region. For now, it can be understood as a pointer to a pointer.
   }];
 }
 

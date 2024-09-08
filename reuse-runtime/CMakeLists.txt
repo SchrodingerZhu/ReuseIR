@@ -5,7 +5,7 @@ include(CheckCXXCompilerFlag)
 FetchContent_Declare(
   snmalloc
   GIT_REPOSITORY https://github.com/microsoft/snmalloc
-  GIT_TAG        6af38acd94d401313b7237bb7c2df5e662e135cf
+  GIT_TAG        fcad15456b04ec59e2ab7df7ba27a4d8933c7f6a
 )
 FetchContent_GetProperties(snmalloc)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
