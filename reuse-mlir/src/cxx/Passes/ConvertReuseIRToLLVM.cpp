@@ -21,6 +21,7 @@
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <llvm-20/llvm/Support/raw_ostream.h>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -248,6 +249,30 @@ public:
     rewriter.create<LLVM::StoreOp>(
         op->getLoc(), one, counterPtr,
         cache.getDataLayout().getTypeABIAlignment(counterTy));
+    if (op.getRegion()) {
+      auto nextPtr = rewriter.create<LLVM::GEPOp>(
+          op->getLoc(), ptrTy, convertedRcBoxTy, adaptor.getToken(),
+          ArrayRef<LLVM::GEPArg>{0, layout.getField(1).index});
+      auto vtablePtr = rewriter.create<LLVM::GEPOp>(
+          op->getLoc(), ptrTy, convertedRcBoxTy, adaptor.getToken(),
+          ArrayRef<LLVM::GEPArg>{0, layout.getField(2).index});
+      // store null ptr to next field
+      auto nullPtr = rewriter.create<LLVM::ZeroOp>(op->getLoc(), ptrTy);
+      rewriter.create<LLVM::StoreOp>(
+          op->getLoc(), nullPtr, nextPtr,
+          cache.getDataLayout().getTypeABIAlignment(ptrTy));
+      // store vtable ptr to vtable field
+      std::string mangledName;
+      llvm::raw_string_ostream os(mangledName);
+      formatMangledNameTo(rcTy.getPointee(), os);
+      os << "::$fvtable";
+      auto vtable = rewriter.create<LLVM::AddressOfOp>(
+          op->getLoc(), ptrTy,
+          FlatSymbolRefAttr::get(getContext(), mangledName));
+      rewriter.create<LLVM::StoreOp>(
+          op->getLoc(), vtable, vtablePtr,
+          cache.getDataLayout().getTypeABIAlignment(ptrTy));
+    }
     // if we know previous value is loaded, we can optimize it to use inline
     // memcpy
     if (auto load = dyn_cast_or_null<LLVM::LoadOp>(
@@ -338,6 +363,71 @@ public:
                                     rewriter.create<LLVM::AddressOfOp>(
                                         op->getLoc(), ptrTy, pair.value()),
                                     pair.index());
+                              });
+      rewriter.create<LLVM::ReturnOp>(op->getLoc(), value);
+    }
+    rewriter.replaceOp(op, glbOp);
+    return mlir::reuse_ir::success();
+  }
+};
+
+class FreezableVTableOpLowering
+    : public ReuseIRConvPatternWithLayoutCache<FreezableVTableOp> {
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      FreezableVTableOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto indexTy = getLLVMTypeConverter().getIndexType();
+    auto vtableTy = LLVM::LLVMStructType::getLiteral(
+        getContext(), {ptrTy, ptrTy, indexTy, indexTy, indexTy});
+    auto glbOp = rewriter.create<LLVM::GlobalOp>(
+        op->getLoc(), vtableTy, /*isConstant=*/true, LLVM::Linkage::Internal,
+        op.getName(), /*value=*/nullptr,
+        /*alignment=*/cache.getDataLayout().getTypeABIAlignment(vtableTy),
+        /*addrSpace=*/0, /*dsoLocal=*/true, /*threadLocal=*/false);
+    glbOp->setAttr("llvm.linkage",
+                   LLVM::LinkageAttr::get(getContext(),
+                                          LLVM::linkage::Linkage::LinkonceODR));
+    Block *block = rewriter.createBlock(&glbOp.getInitializerRegion());
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(block);
+      mlir::Value value =
+          rewriter.create<LLVM::UndefOp>(op->getLoc(), vtableTy);
+      auto symbols = std::array<FlatSymbolRefAttr, 2>{adaptor.getDropAttr(),
+                                                      adaptor.getScannerAttr()};
+      auto constants = std::array<mlir::Value, 3>{
+          rewriter.create<LLVM::ConstantOp>(op->getLoc(), indexTy,
+                                            adaptor.getSize()),
+          rewriter.create<LLVM::ConstantOp>(op->getLoc(), indexTy,
+                                            adaptor.getAlignment()),
+          rewriter.create<LLVM::ConstantOp>(op->getLoc(), indexTy,
+                                            adaptor.getDataOffset())};
+
+      auto symEnums = llvm::enumerate(symbols);
+      auto constEnums = llvm::enumerate(constants);
+      value = std::accumulate(
+          symEnums.begin(), symEnums.end(), value,
+          [&](mlir::Value value, auto pair) {
+            return rewriter.create<LLVM::InsertValueOp>(
+                op->getLoc(), value,
+                pair.value()
+                    ? rewriter
+                          .create<LLVM::AddressOfOp>(op->getLoc(), ptrTy,
+                                                     pair.value())
+                          .getResult()
+                    : rewriter.create<LLVM::ZeroOp>(op->getLoc(), ptrTy)
+                          .getResult(),
+                pair.index());
+          });
+      value = std::accumulate(constEnums.begin(), constEnums.end(), value,
+                              [&](mlir::Value value, auto pair) {
+                                return rewriter.create<LLVM::InsertValueOp>(
+                                    op->getLoc(), value, pair.value(),
+                                    pair.index() + symbols.size());
                               });
       rewriter.create<LLVM::ReturnOp>(op->getLoc(), value);
     }
@@ -522,6 +612,7 @@ public:
 using NullableCoerceOpLowering = TypeCoercionLowering<NullableCoerceOp>;
 using NullableNonNullOpLowering = TypeCoercionLowering<NullableNonNullOp>;
 using RcTokenizeOpLowering = TypeCoercionLowering<RcTokenizeOp>;
+using RcAsPtrOpLowering = TypeCoercionLowering<RcAsPtrOp>;
 
 class NullableNullOpLowering
     : public mlir::OpConversionPattern<NullableNullOp> {
@@ -773,19 +864,20 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   mlir::RewritePatternSet patterns(&getContext());
   mlir::cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
-  patterns
-      .add<RcAcquireOpLowering, RcDecreaseOpLowering, RcReleaseOpLowering,
-           TokenAllocOpLowering, TokenFreeOpLowering, NullableCoerceOpLowering,
-           NullableCheckOpLowering, NullableNonNullOpLowering,
-           NullableNullOpLowering, RcTokenizeOpLowering, UnreachableOpLowering>(
-          converter, &getContext());
+  patterns.add<RcAcquireOpLowering, RcDecreaseOpLowering, RcReleaseOpLowering,
+               TokenAllocOpLowering, TokenFreeOpLowering,
+               NullableCoerceOpLowering, NullableCheckOpLowering,
+               NullableNonNullOpLowering, NullableNullOpLowering,
+               RcTokenizeOpLowering, UnreachableOpLowering, RcAsPtrOpLowering>(
+      converter, &getContext());
   patterns
       .add<RcBorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
            LoadOpLowering, ClosureVTableOpLowering, ClosureAssembleOpLowering,
            DestroyOpLowering, UnionGetTagOpLowering, UnionInspectOpLowering,
            CompositeAssembleOpLowering, UnionAssembleOpLowering,
            RcCreateOpLowering, RegionCreateOpLowering, MRefAssignOpLowering,
-           RcFreezeOpLowering>(cache, converter, &getContext());
+           RcFreezeOpLowering, FreezableVTableOpLowering>(cache, converter,
+                                                          &getContext());
   mlir::ConversionTarget target(getContext());
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalOp<mlir::ModuleOp>();

@@ -18,7 +18,6 @@
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/SmallVector.h"
-#include <llvm-20/llvm/Support/ErrorHandling.h>
 #include <memory>
 #include <numeric>
 
@@ -78,7 +77,8 @@ struct ReuseIRGenFreezableVTablePass
           builder.create<NullableCheckOp>(current.getLoc(), loaded);
       builder.create<scf::IfOp>(
           current.getLoc(), isNonnull, [&](OpBuilder &builder, Location loc) {
-            auto opaque = builder.create<RcAsPtrOp>(current.getLoc(), loaded);
+            auto coerced = builder.create<NullableCoerceOp>(loc, rcTy, loaded);
+            auto opaque = builder.create<RcAsPtrOp>(current.getLoc(), coerced);
             builder.create<func::CallIndirectOp>(current.getLoc(), action,
                                                  ValueRange{opaque, ctx});
             builder.create<scf::YieldOp>(current.getLoc());
@@ -200,6 +200,9 @@ void ReuseIRGenFreezableVTablePass::runOnOperation() {
       builder.create<DestroyOp>(module.getLoc(), entry->getArgument(0),
                                 nullptr);
       builder.create<func::ReturnOp>(module.getLoc());
+      dropFn->setAttr("llvm.linkage",
+                      LLVM::LinkageAttr::get(
+                          &getContext(), LLVM::linkage::Linkage::LinkonceODR));
     }
     if (scanFn) {
       OpBuilder::InsertionGuard guard(builder);
@@ -209,6 +212,10 @@ void ReuseIRGenFreezableVTablePass::runOnOperation() {
       auto action = entry->getArgument(1);
       auto ctx = entry->getArgument(2);
       emitScan(builder, action, ctx, ref);
+      builder.create<func::ReturnOp>(module.getLoc());
+      scanFn->setAttr("llvm.linkage",
+                      LLVM::LinkageAttr::get(
+                          &getContext(), LLVM::linkage::Linkage::LinkonceODR));
     }
   }
 }
