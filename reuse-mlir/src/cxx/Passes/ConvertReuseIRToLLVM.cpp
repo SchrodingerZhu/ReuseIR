@@ -21,7 +21,6 @@
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <llvm-20/llvm/Support/raw_ostream.h>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -227,7 +226,7 @@ public:
       RcCreateOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
     auto rcTy = op.getType();
-    unsigned dataIndex = op.getRegion() ? 1 : 3;
+    unsigned dataIndex = op.getRegion() ? 3 : 1;
     auto rcBoxTy = RcBoxType::get(getContext(), rcTy.getPointee(),
                                   rcTy.getAtomicKind(), rcTy.getFreezingKind());
     const auto &layout = cache.get(rcBoxTy);
@@ -384,13 +383,10 @@ public:
     auto vtableTy = LLVM::LLVMStructType::getLiteral(
         getContext(), {ptrTy, ptrTy, indexTy, indexTy, indexTy});
     auto glbOp = rewriter.create<LLVM::GlobalOp>(
-        op->getLoc(), vtableTy, /*isConstant=*/true, LLVM::Linkage::Internal,
+        op->getLoc(), vtableTy, /*isConstant=*/true, LLVM::Linkage::LinkonceODR,
         op.getName(), /*value=*/nullptr,
         /*alignment=*/cache.getDataLayout().getTypeABIAlignment(vtableTy),
         /*addrSpace=*/0, /*dsoLocal=*/true, /*threadLocal=*/false);
-    glbOp->setAttr("llvm.linkage",
-                   LLVM::LinkageAttr::get(getContext(),
-                                          LLVM::linkage::Linkage::LinkonceODR));
     Block *block = rewriter.createBlock(&glbOp.getInitializerRegion());
     {
       OpBuilder::InsertionGuard guard(rewriter);
