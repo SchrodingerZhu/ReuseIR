@@ -1,6 +1,6 @@
 #![allow(clippy::missing_safety_doc)]
 
-use std::ptr::NonNull;
+use std::{ffi::c_void, ptr::NonNull};
 
 use smallvec::SmallVec;
 
@@ -74,89 +74,24 @@ impl FreezingStatus {
     }
 }
 
+type ActionFn = Option<unsafe extern "C" fn(*mut FreezableRcBoxHeader, *mut c_void)>;
+type ScannerFn = Option<unsafe extern "C" fn(*mut c_void, ActionFn, *mut c_void)>;
+type DropFn = Option<unsafe extern "C" fn(*mut c_void)>;
+
 #[repr(C)]
 pub struct FreezableVTable {
-    drop: std::option::Option<unsafe extern "C" fn(*mut FreezableRcBoxHeader)>,
+    drop: DropFn,
+    scanner: ScannerFn,
     size: usize,
     alignment: usize,
-    scan_count: isize,
-    scan_offset: [usize; 0],
+    data_offset: usize,
 }
 
 #[repr(C)]
 pub struct FreezableRcBoxHeader {
     status: FreezingStatus,
     next: *mut Self,
-    vtable: *const FreezableVTable,
-}
-
-enum FieldIterator {
-    Composite {
-        slice_iter: std::slice::Iter<'static, usize>,
-        base_pointer: NonNull<u8>,
-    },
-    Array {
-        cursor: NonNull<u8>,
-        remaining: usize,
-        stride: usize,
-    },
-}
-
-impl FieldIterator {
-    unsafe fn new(base_pointer: NonNull<FreezableRcBoxHeader>) -> Self {
-        let vtable = base_pointer.as_ref().vtable;
-        if (*vtable).scan_count >= 0 {
-            let slice = std::slice::from_raw_parts(
-                (*vtable).scan_offset.as_ptr(),
-                (*vtable).scan_count as usize,
-            );
-            Self::Composite {
-                slice_iter: slice.iter(),
-                base_pointer: base_pointer.cast(),
-            }
-        } else {
-            let remaining = -(*vtable).scan_count as usize;
-            let stride = (*vtable).scan_offset.as_ptr().read();
-            Self::Array {
-                cursor: base_pointer.cast(),
-                remaining,
-                stride,
-            }
-        }
-    }
-}
-
-impl Iterator for FieldIterator {
-    type Item = Option<NonNull<FreezableRcBoxHeader>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::Composite {
-                slice_iter,
-                base_pointer,
-            } => slice_iter.next().map(|offset| unsafe {
-                let pointer = base_pointer
-                    .byte_add(*offset)
-                    .cast::<*mut FreezableRcBoxHeader>();
-                NonNull::new(pointer.read())
-            }),
-            Self::Array {
-                cursor,
-                remaining,
-                stride,
-            } => {
-                if *remaining == 0 {
-                    return None;
-                }
-                unsafe {
-                    let pointer = cursor.cast::<*mut FreezableRcBoxHeader>().read();
-                    *cursor = cursor.byte_add(*stride);
-                    *remaining -= 1;
-                    Some(NonNull::new(pointer))
-                }
-            }
-        }
-    }
+    vtable: NonNull<FreezableVTable>,
 }
 
 unsafe fn increase_refcnt(mut object: NonNull<FreezableRcBoxHeader>) {
@@ -206,34 +141,60 @@ unsafe fn dispose(object: NonNull<FreezableRcBoxHeader>) {
         stack.push(object);
         object.as_mut().status = FreezingStatus::disposing();
     }
-    let mut dfs = Stack::new();
-    let mut scc = Stack::new();
-    let mut recycle = Stack::new();
-    add_stack(&mut dfs, find_representative(object));
-    while let Some(obj) = dfs.pop() {
-        scc.push(obj);
-        while let Some(obj) = scc.pop() {
-            recycle.push(obj);
-            for field in FieldIterator::new(obj).flatten() {
+    struct DisposeContext {
+        dfs: Stack,
+        scc: Stack,
+        recycle: Stack,
+    }
+    let mut ctx = DisposeContext {
+        dfs: Stack::new(),
+        scc: Stack::new(),
+        recycle: Stack::new(),
+    };
+    add_stack(&mut ctx.dfs, find_representative(object));
+    while let Some(obj) = ctx.dfs.pop() {
+        ctx.scc.push(obj);
+        while let Some(obj) = ctx.scc.pop() {
+            ctx.recycle.push(obj);
+            unsafe extern "C" fn dispose_action(
+                field: *mut FreezableRcBoxHeader,
+                ctx: *mut c_void,
+            ) {
+                let ctx = &mut *(ctx as *mut DisposeContext);
+                let field = NonNull::new_unchecked(field);
                 let next = find_representative(field);
                 match next.as_ref().status.get_kind() {
-                    StatusKind::Disposing if field != next => add_stack(&mut scc, field),
-                    StatusKind::Rc if decrease_refcnt(next) => add_stack(&mut dfs, next),
-                    _ => continue,
+                    StatusKind::Disposing if field != next => add_stack(&mut ctx.scc, field),
+                    StatusKind::Rc if decrease_refcnt(next) => add_stack(&mut ctx.dfs, next),
+                    _ => (),
                 }
+            }
+            let vtable = obj.as_ref().vtable;
+            if let Some(scanner) = vtable.as_ref().scanner {
+                scanner(
+                    obj.as_ptr()
+                        .cast::<c_void>()
+                        .byte_add(vtable.as_ref().data_offset),
+                    Some(dispose_action),
+                    &mut ctx as *mut _ as *mut c_void,
+                );
             }
         }
     }
     stacker::maybe_grow(16 * 1024, 1024 * 1024, || {
-        while let Some(obj) = recycle.pop() {
+        while let Some(obj) = ctx.recycle.pop() {
             let vtable = obj.as_ref().vtable;
-            if let Some(dtor) = (*vtable).drop {
-                dtor(obj.as_ptr());
+            if let Some(dtor) = vtable.as_ref().drop {
+                let ptr = obj
+                    .as_ptr()
+                    .cast::<c_void>()
+                    .byte_add(vtable.as_ref().data_offset);
+                dtor(ptr);
             }
             crate::allocator::__reuse_ir_dealloc(
                 obj.cast().as_ptr(),
-                (*vtable).size,
-                (*vtable).alignment,
+                vtable.as_ref().size,
+                vtable.as_ref().alignment,
             );
         }
     });
@@ -246,7 +207,9 @@ pub unsafe extern "C" fn __reuse_ir_freeze(object: *mut FreezableRcBoxHeader) {
     };
     type PendingList = SmallVec<[NonNull<FreezableRcBoxHeader>; 32]>;
     let mut pending = PendingList::new();
-    unsafe fn freeze(mut object: NonNull<FreezableRcBoxHeader>, pending: &mut PendingList) {
+    unsafe extern "C" fn freeze(object: *mut FreezableRcBoxHeader, pending: *mut c_void) {
+        let pending = &mut *(pending as *mut PendingList);
+        let mut object = NonNull::new_unchecked(object);
         match object.as_ref().status.get_kind() {
             StatusKind::Rc => {
                 let root = find_representative(object);
@@ -264,16 +227,23 @@ pub unsafe extern "C" fn __reuse_ir_freeze(object: *mut FreezableRcBoxHeader) {
                 object.as_mut().status = FreezingStatus::rc(1);
                 pending.push(object);
                 stacker::maybe_grow(16 * 1024, 1024 * 1024, || {
-                    let iter = FieldIterator::new(object);
-                    for field in iter.flatten() {
-                        freeze(field, pending);
+                    let vtable = object.as_ref().vtable;
+                    if let Some(scanner) = vtable.as_ref().scanner {
+                        scanner(
+                            object
+                                .as_ptr()
+                                .cast::<c_void>()
+                                .byte_add(vtable.as_ref().data_offset),
+                            Some(freeze),
+                            pending as *mut _ as *mut c_void,
+                        );
                     }
                 });
             }
             _ => std::hint::unreachable_unchecked(),
         }
     }
-    freeze(object, &mut pending)
+    freeze(object.as_ptr(), (&mut pending) as *mut _ as *mut c_void);
 }
 
 #[no_mangle]

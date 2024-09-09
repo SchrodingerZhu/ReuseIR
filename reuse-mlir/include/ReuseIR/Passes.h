@@ -18,6 +18,7 @@ std::unique_ptr<Pass> createReuseIRAcquireReleaseFusionPass();
 std::unique_ptr<Pass> createReuseIRInferUnionTagPass();
 std::unique_ptr<Pass> createReuseIRPrintReuseAnalysisPass();
 std::unique_ptr<Pass> createReuseIRTokenReusePass();
+std::unique_ptr<Pass> createReuseIRGenFreezableVTablePass();
 
 #define GEN_PASS_CLASSES
 #define GEN_PASS_REGISTRATION

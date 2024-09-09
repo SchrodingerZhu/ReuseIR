@@ -26,6 +26,34 @@ namespace REUSE_IR_DECL_SCOPE {
 #define GEN_PASS_DEF_REUSEIREXPANDCONTROLFLOW
 #include "ReuseIR/Passes.h.inc"
 
+class RegionRunExpansionPattern : public OpRewritePattern<RegionRunOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(RegionRunOp op,
+                                PatternRewriter &rewriter) const final {
+    auto &region = op.getBody();
+    auto execute = rewriter.create<scf::ExecuteRegionOp>(op->getLoc(),
+                                                         op->getResultTypes());
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      auto argument = region.front().getArgument(0);
+      rewriter.setInsertionPointToStart(&region.front());
+      auto regionCtx = rewriter.create<RegionCreateOp>(op->getLoc());
+      rewriter.replaceAllUsesWith(argument, regionCtx.getResult());
+    }
+    region.front().eraseArgument(0);
+    region.walk([&](RegionYieldOp yield) {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPoint(yield);
+      rewriter.replaceOpWithNewOp<scf::YieldOp>(yield, yield.getValue());
+    });
+    rewriter.inlineRegionBefore(region, execute.getRegion(),
+                                execute.getRegion().end());
+    rewriter.replaceOp(op, execute);
+    return LogicalResult::success();
+  }
+};
+
 class TokenEnsureExpansionPattern : public OpRewritePattern<TokenEnsureOp> {
 public:
   using OpRewritePattern::OpRewritePattern;
@@ -154,7 +182,7 @@ public:
 class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
   CompositeLayoutCache &cache;
   bool needDrop(Type type) const {
-    if (type.isIntOrIndexOrFloat())
+    if (type.isIntOrIndexOrFloat() || isa<MRefType>(type))
       return false;
     if (auto compositeTy = dyn_cast<CompositeType>(type)) {
       return std::any_of(compositeTy.getInnerTypes().begin(),
@@ -211,24 +239,6 @@ class DestroyExpansionPattern : public OpRewritePattern<DestroyOp> {
                                              target, rewriter.getIndexAttr(i));
         generateDestroy(rewriter, field, {});
       }
-      return true;
-    }
-
-    // for mref type, insert release if it is loaded into a nonnull rc pointer
-    if (auto mrefTy = dyn_cast<MRefType>(refTy.getPointee())) {
-      auto rcTy = RcType::get(getContext(), mrefTy.getPointee(),
-                              mrefTy.getAtomicKind(), refTy.getFreezingKind());
-      auto nullableTy = NullableType::get(getContext(), rcTy);
-      auto loaded =
-          rewriter.create<LoadOp>(target.getLoc(), nullableTy, target);
-      auto exists = rewriter.create<NullableCheckOp>(target.getLoc(), loaded);
-      rewriter.create<scf::IfOp>(
-          target.getLoc(), exists, [&](OpBuilder &builder, Location loc) {
-            auto coerced = builder.create<NullableCoerceOp>(loc, rcTy, loaded);
-            // freezeable pointer has no token
-            builder.create<RcReleaseOp>(loc, Type{}, coerced, nullptr);
-            builder.create<scf::YieldOp>(loc);
-          });
       return true;
     }
 
@@ -310,8 +320,8 @@ void ReuseIRExpandControlFlowPass::runOnOperation() {
   // Collect rewrite patterns.
   RewritePatternSet patterns(&getContext());
   patterns.add<DestroyExpansionPattern>(cache, &getContext());
-  patterns.add<TokenEnsureExpansionPattern, TokenFreeExpansionPattern>(
-      &getContext());
+  patterns.add<TokenEnsureExpansionPattern, TokenFreeExpansionPattern,
+               RegionRunExpansionPattern>(&getContext());
 
   if (outlineNestedRelease)
     patterns.add<RcReleaseExpansionPattern<true>>(&getContext());

@@ -329,5 +329,12 @@ def ReuseIR_NullableToken : Type<
   /* baseType */ "::mlir::reuse_ir::NullableType"
 >;
 
+def ReuseIR_PtrType : ReuseIR_Type<"Ptr", "ptr",
+    [DeclareTypeInterfaceMethods<DataLayoutTypeInterface>]> {
+  let summary = "ReuseIR opaque pointer type";
+  let description = [{
+    `reuse_ir.ptr` is an opaque pointer type.
+  }];
+}
 
 #endif // REUSE_IR_TYPES
