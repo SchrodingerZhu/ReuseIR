@@ -7,6 +7,7 @@ add_mlir_dialect_library(MLIRReuseIRPasses
     InferUnionTag.cpp
     PrintReuseAnalysis.cpp
     TokenReuse.cpp
+    GenFreezableVTable.cpp
   DEPENDS
     MLIRReuseIR
     MLIRReuseIRAnalysis

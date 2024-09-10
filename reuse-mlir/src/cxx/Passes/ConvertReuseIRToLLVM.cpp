@@ -15,6 +15,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/TypeRange.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LLVM.h"
@@ -54,6 +55,57 @@ public:
   ReuseIRConvPatternWithLayoutCache(CompositeLayoutCache &cache, Args &&...args)
       : mlir::OpConversionPattern<Op>(std::forward<Args>(args)...),
         cache(cache) {}
+};
+
+class RcFreezeOpLowering
+    : public ReuseIRConvPatternWithLayoutCache<RcFreezeOp> {
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      RcFreezeOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    if (op.getRcPtr().getType().getAtomicKind().getValue() !=
+        AtomicKind::nonatomic)
+      return LogicalResult::failure();
+    rewriter.create<func::CallOp>(
+        op->getLoc(), FlatSymbolRefAttr::get(getContext(), "__reuse_ir_freeze"),
+        TypeRange{}, adaptor.getRcPtr());
+    rewriter.replaceOp(op, adaptor.getRcPtr());
+    return mlir::reuse_ir::success();
+  }
+};
+
+class MRefAssignOpLowering
+    : public ReuseIRConvPatternWithLayoutCache<MRefAssignOp> {
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      MRefAssignOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    rewriter.replaceOpWithNewOp<LLVM::StoreOp>(
+        op, adaptor.getValue(), adaptor.getRefOfMRef(),
+        cache.getDataLayout().getTypeABIAlignment(ptrTy));
+    return mlir::reuse_ir::success();
+  }
+};
+
+class RegionCreateOpLowering
+    : public ReuseIRConvPatternWithLayoutCache<RegionCreateOp> {
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      RegionCreateOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto ptrAlign = cache.getDataLayout().getTypeABIAlignment(ptrTy);
+    auto one = rewriter.create<LLVM::ConstantOp>(
+        op->getLoc(), getLLVMTypeConverter().getIndexType(), 1);
+    rewriter.replaceOpWithNewOp<LLVM::AllocaOp>(op, ptrTy, ptrTy, one,
+                                                ptrAlign);
+    return mlir::reuse_ir::success();
+  }
 };
 
 class DestroyOpLowering : public ReuseIRConvPatternWithLayoutCache<DestroyOp> {
@@ -173,24 +225,22 @@ public:
   mlir::reuse_ir::LogicalResult matchAndRewrite(
       RcCreateOp op, OpAdaptor adaptor,
       mlir::ConversionPatternRewriter &rewriter) const override final {
-    // TODO: implement this
-    if (op.getRegion())
-      return LogicalResult::failure();
     auto rcTy = op.getType();
+    unsigned dataIndex = op.getRegion() ? 3 : 1;
     auto rcBoxTy = RcBoxType::get(getContext(), rcTy.getPointee(),
                                   rcTy.getAtomicKind(), rcTy.getFreezingKind());
     const auto &layout = cache.get(rcBoxTy);
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto convertedRcBoxTy = layout.getLLVMType(getLLVMTypeConverter());
     auto dataAreaTy = convertedRcBoxTy.getTypeAtIndex(
-        rewriter.getI32IntegerAttr(layout.getField(1).index));
+        rewriter.getI32IntegerAttr(layout.getField(dataIndex).index));
     auto counterPtr = rewriter.create<LLVM::GEPOp>(
         op->getLoc(), ptrTy, convertedRcBoxTy, adaptor.getToken(),
         ArrayRef<LLVM::GEPArg>{0, 0});
     auto valuePtr = rewriter.create<LLVM::GEPOp>(
         op->getLoc(), ptrTy, convertedRcBoxTy, adaptor.getToken(),
-        ArrayRef<LLVM::GEPArg>{0, layout.getField(1).index});
-    auto alignment = layout.getField(1).alignment;
+        ArrayRef<LLVM::GEPArg>{0, layout.getField(dataIndex).index});
+    auto alignment = layout.getField(dataIndex).alignment;
     assumeAlignment(valuePtr, alignment.value(), rewriter,
                     getLLVMTypeConverter());
     auto counterTy = getLLVMTypeConverter().getIndexType();
@@ -198,6 +248,37 @@ public:
     rewriter.create<LLVM::StoreOp>(
         op->getLoc(), one, counterPtr,
         cache.getDataLayout().getTypeABIAlignment(counterTy));
+    if (op.getRegion()) {
+      auto nextPtr = rewriter.create<LLVM::GEPOp>(
+          op->getLoc(), ptrTy, convertedRcBoxTy, adaptor.getToken(),
+          ArrayRef<LLVM::GEPArg>{0, layout.getField(1).index});
+      auto vtablePtr = rewriter.create<LLVM::GEPOp>(
+          op->getLoc(), ptrTy, convertedRcBoxTy, adaptor.getToken(),
+          ArrayRef<LLVM::GEPArg>{0, layout.getField(2).index});
+      // store vtable ptr to vtable field
+      std::string mangledName;
+      llvm::raw_string_ostream os(mangledName);
+      formatMangledNameTo(rcTy.getPointee(), os);
+      os << "::$fvtable";
+      auto vtable = rewriter.create<LLVM::AddressOfOp>(
+          op->getLoc(), ptrTy,
+          FlatSymbolRefAttr::get(getContext(), mangledName));
+      rewriter.create<LLVM::StoreOp>(
+          op->getLoc(), vtable, vtablePtr,
+          cache.getDataLayout().getTypeABIAlignment(ptrTy));
+      // load tail from region ctx
+      auto tail = rewriter.create<LLVM::LoadOp>(
+          op->getLoc(), ptrTy, adaptor.getRegion(),
+          cache.getDataLayout().getTypeABIAlignment(ptrTy));
+      // store tail to next field
+      rewriter.create<LLVM::StoreOp>(
+          op->getLoc(), tail, nextPtr,
+          cache.getDataLayout().getTypeABIAlignment(ptrTy));
+      // store ourself to region ctx
+      rewriter.create<LLVM::StoreOp>(
+          op->getLoc(), adaptor.getToken(), adaptor.getRegion(),
+          cache.getDataLayout().getTypeABIAlignment(ptrTy));
+    }
     // if we know previous value is loaded, we can optimize it to use inline
     // memcpy
     if (auto load = dyn_cast_or_null<LLVM::LoadOp>(
@@ -288,6 +369,68 @@ public:
                                     rewriter.create<LLVM::AddressOfOp>(
                                         op->getLoc(), ptrTy, pair.value()),
                                     pair.index());
+                              });
+      rewriter.create<LLVM::ReturnOp>(op->getLoc(), value);
+    }
+    rewriter.replaceOp(op, glbOp);
+    return mlir::reuse_ir::success();
+  }
+};
+
+class FreezableVTableOpLowering
+    : public ReuseIRConvPatternWithLayoutCache<FreezableVTableOp> {
+public:
+  using ReuseIRConvPatternWithLayoutCache::ReuseIRConvPatternWithLayoutCache;
+
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      FreezableVTableOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto indexTy = getLLVMTypeConverter().getIndexType();
+    auto vtableTy = LLVM::LLVMStructType::getLiteral(
+        getContext(), {ptrTy, ptrTy, indexTy, indexTy, indexTy});
+    auto glbOp = rewriter.create<LLVM::GlobalOp>(
+        op->getLoc(), vtableTy, /*isConstant=*/true, LLVM::Linkage::LinkonceODR,
+        op.getName(), /*value=*/nullptr,
+        /*alignment=*/cache.getDataLayout().getTypeABIAlignment(vtableTy),
+        /*addrSpace=*/0, /*dsoLocal=*/true, /*threadLocal=*/false);
+    Block *block = rewriter.createBlock(&glbOp.getInitializerRegion());
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(block);
+      mlir::Value value =
+          rewriter.create<LLVM::UndefOp>(op->getLoc(), vtableTy);
+      auto symbols = std::array<FlatSymbolRefAttr, 2>{adaptor.getDropAttr(),
+                                                      adaptor.getScannerAttr()};
+      auto constants = std::array<mlir::Value, 3>{
+          rewriter.create<LLVM::ConstantOp>(op->getLoc(), indexTy,
+                                            adaptor.getSize()),
+          rewriter.create<LLVM::ConstantOp>(op->getLoc(), indexTy,
+                                            adaptor.getAlignment()),
+          rewriter.create<LLVM::ConstantOp>(op->getLoc(), indexTy,
+                                            adaptor.getDataOffset())};
+
+      auto symEnums = llvm::enumerate(symbols);
+      auto constEnums = llvm::enumerate(constants);
+      value = std::accumulate(
+          symEnums.begin(), symEnums.end(), value,
+          [&](mlir::Value value, auto pair) {
+            return rewriter.create<LLVM::InsertValueOp>(
+                op->getLoc(), value,
+                pair.value()
+                    ? rewriter
+                          .create<LLVM::AddressOfOp>(op->getLoc(), ptrTy,
+                                                     pair.value())
+                          .getResult()
+                    : rewriter.create<LLVM::ZeroOp>(op->getLoc(), ptrTy)
+                          .getResult(),
+                pair.index());
+          });
+      value = std::accumulate(constEnums.begin(), constEnums.end(), value,
+                              [&](mlir::Value value, auto pair) {
+                                return rewriter.create<LLVM::InsertValueOp>(
+                                    op->getLoc(), value, pair.value(),
+                                    pair.index() + symbols.size());
                               });
       rewriter.create<LLVM::ReturnOp>(op->getLoc(), value);
     }
@@ -469,9 +612,23 @@ public:
   }
 };
 
+class RegionCleanUpOpLowering
+    : public mlir::OpConversionPattern<RegionCleanUpOp> {
+public:
+  using OpConversionPattern<RegionCleanUpOp>::OpConversionPattern;
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      RegionCleanUpOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    rewriter.replaceOpWithNewOp<func::CallOp>(
+        op, "__reuse_ir_clean_up_region", TypeRange{}, adaptor.getRegionCtx());
+    return mlir::reuse_ir::success();
+  }
+};
+
 using NullableCoerceOpLowering = TypeCoercionLowering<NullableCoerceOp>;
 using NullableNonNullOpLowering = TypeCoercionLowering<NullableNonNullOp>;
 using RcTokenizeOpLowering = TypeCoercionLowering<RcTokenizeOp>;
+using RcAsPtrOpLowering = TypeCoercionLowering<RcAsPtrOp>;
 
 class NullableNullOpLowering
     : public mlir::OpConversionPattern<NullableNullOp> {
@@ -696,6 +853,20 @@ static void emitRuntimeFunctions(mlir::Location loc,
     builder.setInsertionPointToStart(&unreachableFunc.getBlocks().front());
     builder.create<LLVM::UnreachableOp>(loc);
   }
+  auto freezeFunc = builder.create<mlir::func::FuncOp>(
+      loc, builder.getStringAttr("__reuse_ir_freeze"),
+      builder.getFunctionType({ptrTy}, {}), builder.getStringAttr("private"),
+      nullptr, nullptr);
+  freezeFunc.setArgAttr(0, "llvm.nonnull", builder.getUnitAttr());
+  freezeFunc->setAttr("llvm.nounwind", builder.getUnitAttr());
+  freezeFunc->setAttr("llvm.nofree", builder.getUnitAttr());
+  freezeFunc->setAttr("llvm.mustprogress", builder.getUnitAttr());
+  freezeFunc->setAttr("llvm.willreturn", builder.getUnitAttr());
+  auto cleanUpRegionFunc = builder.create<mlir::func::FuncOp>(
+      loc, builder.getStringAttr("__reuse_ir_clean_up_region"),
+      builder.getFunctionType({ptrTy}, {}), builder.getStringAttr("private"),
+      nullptr, nullptr);
+  cleanUpRegionFunc.setArgAttr(0, "llvm.nonnull", builder.getUnitAttr());
 }
 
 void ConvertReuseIRToLLVMPass::runOnOperation() {
@@ -718,14 +889,17 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
       .add<RcAcquireOpLowering, RcDecreaseOpLowering, RcReleaseOpLowering,
            TokenAllocOpLowering, TokenFreeOpLowering, NullableCoerceOpLowering,
            NullableCheckOpLowering, NullableNonNullOpLowering,
-           NullableNullOpLowering, RcTokenizeOpLowering, UnreachableOpLowering>(
-          converter, &getContext());
+           NullableNullOpLowering, RcTokenizeOpLowering, UnreachableOpLowering,
+           RcAsPtrOpLowering, RegionCleanUpOpLowering>(converter,
+                                                       &getContext());
   patterns
       .add<RcBorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
            LoadOpLowering, ClosureVTableOpLowering, ClosureAssembleOpLowering,
            DestroyOpLowering, UnionGetTagOpLowering, UnionInspectOpLowering,
            CompositeAssembleOpLowering, UnionAssembleOpLowering,
-           RcCreateOpLowering>(cache, converter, &getContext());
+           RcCreateOpLowering, RegionCreateOpLowering, MRefAssignOpLowering,
+           RcFreezeOpLowering, FreezableVTableOpLowering>(cache, converter,
+                                                          &getContext());
   mlir::ConversionTarget target(getContext());
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalOp<mlir::ModuleOp>();

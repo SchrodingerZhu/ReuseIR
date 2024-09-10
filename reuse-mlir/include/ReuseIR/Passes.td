@@ -24,6 +24,15 @@ def ReuseIRClosureOutlining : Pass<"reuse-ir-closure-outlining", "::mlir::Module
   let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect"];
 }
 
+def ReuseIRGenFreezableVTable : Pass<"reuse-ir-gen-freezable-vtable", "::mlir::ModuleOp"> {
+  let summary = "Generate vtables for freezable rc objects";
+  let description = [{
+    This pass generates vtables for freezable rc objects.
+  }];
+  let constructor = "::mlir::reuse_ir::createReuseIRGenFreezableVTablePass()";
+  let dependentDialects = ["::mlir::reuse_ir::ReuseIRDialect", "::mlir::scf::SCFDialect"];
+}
+
 def ReuseIRExpandControlFlow : Pass<"reuse-ir-expand-control-flow", "::mlir::ModuleOp"> {
   let summary = "Expand structured control flows for ReuseIR operations";
   let description = [{

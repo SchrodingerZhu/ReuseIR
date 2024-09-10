@@ -97,6 +97,7 @@ GENERATE_POINTER_ALIKE_LAYOUT(TokenType)
 GENERATE_POINTER_ALIKE_LAYOUT(MRefType)
 GENERATE_POINTER_ALIKE_LAYOUT(RegionCtxType)
 GENERATE_POINTER_ALIKE_LAYOUT(NullableType)
+GENERATE_POINTER_ALIKE_LAYOUT(PtrType)
 #pragma pop_macro("GENERATE_POINTER_ALIKE_LAYOUT")
 
 // RcBox DataLayoutInterface:
@@ -364,6 +365,9 @@ void populateLLVMTypeConverter(CompositeLayoutCache &cache,
     return mlir::LLVM::LLVMPointerType::get(type.getContext());
   });
   converter.addConversion([](NullableType type) -> Type {
+    return mlir::LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](PtrType type) -> Type {
     return mlir::LLVM::LLVMPointerType::get(type.getContext());
   });
   converter.addConversion(

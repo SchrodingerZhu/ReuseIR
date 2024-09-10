@@ -452,6 +452,44 @@ def ClosureVTableOp : ReuseIR_Op<"closure.vtable"> {
   }];
 }
 
+def RcAsPtrOp : ReuseIR_Op<"rc.as_ptr"> {
+  let summary = "Cast rc pointer to LLVM opaque pointer";
+  let description = [{
+    `rc.as_ptr` casts the rc pointer to LLVM opaque pointer.
+  }];
+  let results = (outs Res<ReuseIR_PtrType, "Opaque Pointer">:$result);
+  let arguments = (ins ReuseIR_RcType:$rc);
+  let assemblyFormat = [{
+    `(` $rc `:` type($rc) `)` attr-dict `:` type($result)
+  }];
+}
+
+def FreezableVTableOp : ReuseIR_Op<"rc.fvtable"> {
+  let summary = "Define a vtable for freezable rc objects";
+  let description = [{
+    `rc.fvtable` defines a vtable for the freezable rc objects.
+  }];
+
+  let arguments = (ins 
+    FlatSymbolRefAttr:$name, 
+    OptionalAttr<FlatSymbolRefAttr>:$drop, 
+    OptionalAttr<FlatSymbolRefAttr>:$scanner,
+    IndexAttr:$size, 
+    IndexAttr:$alignment,
+    IndexAttr:$dataOffset
+  );
+
+  let assemblyFormat = [{
+    attr-dict $name `{` 
+      (`drop` `:` $drop^ `,`)?
+      (`scanner` `:` $scanner^ `,`)?
+      `size` `:` $size `,`
+      `alignment` `:` $alignment `,`
+      `data_offset` `:` $dataOffset
+    `}` 
+  }];
+}
+
 def CompositeAssembleOp : ReuseIR_Op<"composite.assemble"> {
   let summary = "Create a new composite object";
   let description = [{
@@ -478,7 +516,7 @@ def UnionAssembleOp : ReuseIR_Op<"union.assemble"> {
   let hasVerifier = 1;
 }
 
-def RcCreateOp : ReuseIR_Op<"rc.create", [AttrSizedOperandSegments]> {
+def RcCreateOp : ReuseIR_Op<"rc.create"> {
   let summary = "Create a new Rc object";
   let description = [{
     `reuse_ir.rc.create` creates a new Rc object.
@@ -486,12 +524,12 @@ def RcCreateOp : ReuseIR_Op<"rc.create", [AttrSizedOperandSegments]> {
   let results = (outs Res<ReuseIR_RcType, "Rc Object", [MemAlloc<DefaultResource>]>:$rc);
   let arguments = (ins 
     AnyType:$value, 
-    Optional<ReuseIR_TokenType>:$token,
+    ReuseIR_TokenType:$token,
     Optional<ReuseIR_RegionCtxType>:$region
   );
   let assemblyFormat = [{
     `value` `(` $value `)`
-    (`token` `(` $token^ `)` )?
+    `token` `(` $token `)`
     (`region` `(` $region^ `)`)?
     attr-dict `:` functional-type(operands, results)
   }];
@@ -509,6 +547,28 @@ def RegionRunOp : ReuseIR_Op<"region.run", [DeclareOpInterfaceMethods<RegionBran
     ($body^)? attr-dict (`:` type($result)^)?
   }];
   let hasVerifier = 1;
+}
+
+def RegionCreateOp : ReuseIR_Op<"region.create"> {
+  let summary = "Create a new region ctx";
+  let description = [{
+    `reuse_ir.region.create` creates a new region ctx. It serves as an intermediate placeholder for lowering `region.run` operation.
+  }];
+  let results = (outs Res<ReuseIR_RegionCtxType, "res">:$regionCtx);
+  let assemblyFormat = [{
+    attr-dict `:` type($regionCtx)
+  }];
+}
+
+def RegionCleanUpOp : ReuseIR_Op<"region.cleanup"> {
+  let summary = "Clean up the region ctx";
+  let description = [{
+    `reuse_ir.region.cleanup` cleans up the region ctx. It serves as an intermediate placeholder for lowering `region.run` operation.
+  }];
+  let arguments = (ins ReuseIR_RegionCtxType:$regionCtx);
+  let assemblyFormat = [{
+    `(` $regionCtx `:` type($regionCtx) `)` attr-dict
+  }];
 }
 
 def RegionYieldOp : ReuseIR_Op<"region.yield", [

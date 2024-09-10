@@ -251,24 +251,17 @@ mlir::reuse_ir::LogicalResult RcCreateOp::verify() {
     if (getRegion())
       return emitOpError("cannot have a region when creating a nonfreezing RC "
                          "pointer");
-    if (!getToken())
-      return emitOpError("must have a token when creating a nonfreezing RC "
-                         "pointer");
     break;
   case FreezingKind::unfrozen:
     if (!getRegion())
       return emitOpError("must have a region when creating an unfrozen RC "
                          "pointer");
-    if (getToken())
-      return emitOpError("cannot have a token when creating an unfrozen RC "
-                         "pointer");
     break;
   }
-  if (auto token = getToken()) {
-    auto tokenTy = cast<TokenType>(token.getType());
-    return verifyTokenForRC(this->getOperation(), tokenTy, rcPtrTy,
-                            [&](const Twine &msg) { return emitOpError(msg); });
-  }
+  auto tokenTy = cast<TokenType>(getToken().getType());
+  return verifyTokenForRC(this->getOperation(), tokenTy, rcPtrTy,
+                          [&](const Twine &msg) { return emitOpError(msg); });
+
   return mlir::reuse_ir::success();
 }
 template <StringLiteral Literal> struct ParseKeywordAsUnitAttr {
