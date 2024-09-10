@@ -13,3 +13,5 @@ config.substitutions.append((r'%reuse-opt',
 
 config.substitutions.append((r'%FileCheck', config.filecheck_path))
 config.substitutions.append((r'%not', config.not_path))
+config.substitutions.append((r'%mlir-translate', config.mlir_translate_path))
+config.substitutions.append((r'%opt', config.opt_path))
