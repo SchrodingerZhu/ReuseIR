@@ -255,11 +255,6 @@ public:
       auto vtablePtr = rewriter.create<LLVM::GEPOp>(
           op->getLoc(), ptrTy, convertedRcBoxTy, adaptor.getToken(),
           ArrayRef<LLVM::GEPArg>{0, layout.getField(2).index});
-      // store null ptr to next field
-      auto nullPtr = rewriter.create<LLVM::ZeroOp>(op->getLoc(), ptrTy);
-      rewriter.create<LLVM::StoreOp>(
-          op->getLoc(), nullPtr, nextPtr,
-          cache.getDataLayout().getTypeABIAlignment(ptrTy));
       // store vtable ptr to vtable field
       std::string mangledName;
       llvm::raw_string_ostream os(mangledName);
@@ -270,6 +265,18 @@ public:
           FlatSymbolRefAttr::get(getContext(), mangledName));
       rewriter.create<LLVM::StoreOp>(
           op->getLoc(), vtable, vtablePtr,
+          cache.getDataLayout().getTypeABIAlignment(ptrTy));
+      // load tail from region ctx
+      auto tail = rewriter.create<LLVM::LoadOp>(
+          op->getLoc(), ptrTy, adaptor.getRegion(),
+          cache.getDataLayout().getTypeABIAlignment(ptrTy));
+      // store tail to next field
+      rewriter.create<LLVM::StoreOp>(
+          op->getLoc(), tail, nextPtr,
+          cache.getDataLayout().getTypeABIAlignment(ptrTy));
+      // store ourself to region ctx
+      rewriter.create<LLVM::StoreOp>(
+          op->getLoc(), adaptor.getToken(), adaptor.getRegion(),
           cache.getDataLayout().getTypeABIAlignment(ptrTy));
     }
     // if we know previous value is loaded, we can optimize it to use inline
@@ -605,6 +612,19 @@ public:
   }
 };
 
+class RegionCleanUpOpLowering
+    : public mlir::OpConversionPattern<RegionCleanUpOp> {
+public:
+  using OpConversionPattern<RegionCleanUpOp>::OpConversionPattern;
+  mlir::reuse_ir::LogicalResult matchAndRewrite(
+      RegionCleanUpOp op, OpAdaptor adaptor,
+      mlir::ConversionPatternRewriter &rewriter) const override final {
+    rewriter.replaceOpWithNewOp<func::CallOp>(
+        op, "__reuse_ir_clean_up_region", TypeRange{}, adaptor.getRegionCtx());
+    return mlir::reuse_ir::success();
+  }
+};
+
 using NullableCoerceOpLowering = TypeCoercionLowering<NullableCoerceOp>;
 using NullableNonNullOpLowering = TypeCoercionLowering<NullableNonNullOp>;
 using RcTokenizeOpLowering = TypeCoercionLowering<RcTokenizeOp>;
@@ -842,6 +862,11 @@ static void emitRuntimeFunctions(mlir::Location loc,
   freezeFunc->setAttr("llvm.nofree", builder.getUnitAttr());
   freezeFunc->setAttr("llvm.mustprogress", builder.getUnitAttr());
   freezeFunc->setAttr("llvm.willreturn", builder.getUnitAttr());
+  auto cleanUpRegionFunc = builder.create<mlir::func::FuncOp>(
+      loc, builder.getStringAttr("__reuse_ir_clean_up_region"),
+      builder.getFunctionType({ptrTy}, {}), builder.getStringAttr("private"),
+      nullptr, nullptr);
+  cleanUpRegionFunc.setArgAttr(0, "llvm.nonnull", builder.getUnitAttr());
 }
 
 void ConvertReuseIRToLLVMPass::runOnOperation() {
@@ -860,12 +885,13 @@ void ConvertReuseIRToLLVMPass::runOnOperation() {
   mlir::RewritePatternSet patterns(&getContext());
   mlir::cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
-  patterns.add<RcAcquireOpLowering, RcDecreaseOpLowering, RcReleaseOpLowering,
-               TokenAllocOpLowering, TokenFreeOpLowering,
-               NullableCoerceOpLowering, NullableCheckOpLowering,
-               NullableNonNullOpLowering, NullableNullOpLowering,
-               RcTokenizeOpLowering, UnreachableOpLowering, RcAsPtrOpLowering>(
-      converter, &getContext());
+  patterns
+      .add<RcAcquireOpLowering, RcDecreaseOpLowering, RcReleaseOpLowering,
+           TokenAllocOpLowering, TokenFreeOpLowering, NullableCoerceOpLowering,
+           NullableCheckOpLowering, NullableNonNullOpLowering,
+           NullableNullOpLowering, RcTokenizeOpLowering, UnreachableOpLowering,
+           RcAsPtrOpLowering, RegionCleanUpOpLowering>(converter,
+                                                       &getContext());
   patterns
       .add<RcBorrowOpLowering, ValueToRefOpLowering, ProjOpLowering,
            LoadOpLowering, ClosureVTableOpLowering, ClosureAssembleOpLowering,

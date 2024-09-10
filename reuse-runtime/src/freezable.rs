@@ -283,7 +283,25 @@ pub unsafe extern "C" fn __reuse_ir_release_atomic_freezable(object: *mut Freeza
 
 #[no_mangle]
 pub unsafe extern "C" fn __reuse_ir_clean_up_region(region: *mut RegionCtx) {
-    unimplemented!("cannot clean up region: {region:?}")
+    let mut tail = NonNull::new((*region).tail);
+    while let Some(object) = tail {
+        tail = NonNull::new(object.as_ref().next);
+        if matches!(object.as_ref().status.get_kind(), StatusKind::Unmarked) {
+            let vtable = object.as_ref().vtable;
+            if let Some(dtor) = vtable.as_ref().drop {
+                let ptr = object
+                    .as_ptr()
+                    .cast::<c_void>()
+                    .byte_add(vtable.as_ref().data_offset);
+                dtor(ptr);
+            }
+            crate::allocator::__reuse_ir_dealloc(
+                object.cast().as_ptr(),
+                vtable.as_ref().size,
+                vtable.as_ref().alignment,
+            );
+        }
+    }
 }
 
 #[no_mangle]

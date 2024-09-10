@@ -560,6 +560,17 @@ def RegionCreateOp : ReuseIR_Op<"region.create"> {
   }];
 }
 
+def RegionCleanUpOp : ReuseIR_Op<"region.cleanup"> {
+  let summary = "Clean up the region ctx";
+  let description = [{
+    `reuse_ir.region.cleanup` cleans up the region ctx. It serves as an intermediate placeholder for lowering `region.run` operation.
+  }];
+  let arguments = (ins ReuseIR_RegionCtxType:$regionCtx);
+  let assemblyFormat = [{
+    `(` $regionCtx `:` type($regionCtx) `)` attr-dict
+  }];
+}
+
 def RegionYieldOp : ReuseIR_Op<"region.yield", [
     ReturnLike, 
     Terminator,

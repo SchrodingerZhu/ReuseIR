@@ -34,17 +34,19 @@ public:
     auto &region = op.getBody();
     auto execute = rewriter.create<scf::ExecuteRegionOp>(op->getLoc(),
                                                          op->getResultTypes());
+    Value regionCtx;
     {
       OpBuilder::InsertionGuard guard(rewriter);
       auto argument = region.front().getArgument(0);
       rewriter.setInsertionPointToStart(&region.front());
-      auto regionCtx = rewriter.create<RegionCreateOp>(op->getLoc());
-      rewriter.replaceAllUsesWith(argument, regionCtx.getResult());
+      regionCtx = rewriter.create<RegionCreateOp>(op->getLoc());
+      rewriter.replaceAllUsesWith(argument, regionCtx);
     }
     region.front().eraseArgument(0);
     region.walk([&](RegionYieldOp yield) {
       OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPoint(yield);
+      rewriter.create<RegionCleanUpOp>(yield->getLoc(), regionCtx);
       rewriter.replaceOpWithNewOp<scf::YieldOp>(yield, yield.getValue());
     });
     rewriter.inlineRegionBefore(region, execute.getRegion(),
