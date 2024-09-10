@@ -4,7 +4,7 @@
 // RUN:   -convert-scf-to-cf \
 // RUN:   -canonicalize \
 // RUN:   -convert-reuse-ir-to-llvm \
-// RUN:   -convert-to-llvm | %mlir-translate -mlir-to-llvmir | %opt -O3 -S | %FileCheck %s
+// RUN:   -convert-to-llvm -reconcile-unrealized-casts | %mlir-translate -mlir-to-llvmir | %opt -O3 -S | %FileCheck %s
 !urc = !reuse_ir.rc<i64, nonatomic, unfrozen>
 !frc = !reuse_ir.rc<i64, nonatomic, frozen>
 !mref = !reuse_ir.mref<i64, nonatomic>
