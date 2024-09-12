@@ -2,7 +2,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-use std::{ffi::c_char, marker::PhantomData, ptr::NonNull};
+use std::{cell::UnsafeCell, ffi::c_char, marker::PhantomData, ptr::NonNull};
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 type ContextToken<'ctx> = PhantomData<*mut &'ctx ()>;
@@ -34,7 +34,6 @@ wrapper!(Attribute, MlirAttribute);
 wrapper!(Type, MlirType);
 wrapper!(Value, MlirValue);
 wrapper!(Block, MlirBlock);
-wrapper!(Region, MlirRegion);
 wrapper!(Function, Operation<'ctx>);
 impl_from!(Function, Operation);
 wrapper!(FunctionType, Type<'ctx>);
@@ -49,6 +48,13 @@ wrapper!(IndexAttr, Attribute<'ctx>);
 impl_from!(IndexAttr, Attribute);
 wrapper!(UnitAttr, Attribute<'ctx>);
 impl_from!(UnitAttr, Attribute);
+wrapper!(TypeAttr, Attribute<'ctx>);
+impl_from!(TypeAttr, Attribute);
+wrapper!(Identifer, MlirIdentifier);
+wrapper!(NamedAttribute, MlirNamedAttribute);
+
+#[repr(transparent)]
+pub struct Region<'a>(MlirRegion, ContextToken<'a>);
 
 impl<'a> StringRef<'a> {
     pub fn new(s: &str) -> Self {
@@ -111,9 +117,23 @@ impl<'a> Module<'a> {
             StringAttr::new(op.get_context(), name).into(),
         )
     }
+    pub fn get_block(&self) -> Block<'a> {
+        unsafe { Block(mlirModuleGetBody(self.0), self.1) }
+    }
 }
 
-impl<'a> From<Module<'a>> for Operation<'_> {
+impl<'a> Block<'a> {
+    pub fn append_operation<O>(&self, op: O)
+    where
+        O: Into<Operation<'a>>,
+    {
+        unsafe {
+            mlirBlockAppendOwnedOperation(self.0, op.into().0);
+        }
+    }
+}
+
+impl<'a> From<Module<'a>> for Operation<'a> {
     fn from(module: Module) -> Self {
         unsafe {
             let op = mlirModuleGetOperation(module.0);
@@ -172,13 +192,111 @@ impl_display!(Type, mlirTypePrint);
 impl_display!(Attribute, mlirAttributePrint);
 impl_display!(Value, mlirValuePrint);
 
-impl Function<'_> {
-    pub fn new(_name: StringRef, location: Location) -> Self {
+pub enum Visibility {
+    Public,
+    Private,
+    Nested,
+}
+
+#[repr(transparent)]
+pub struct OperationBuilder<'ctx>(UnsafeCell<MlirOperationState>, ContextToken<'ctx>);
+
+impl<'ctx> OperationBuilder<'ctx> {
+    pub fn new<'a, N: Into<StringRef<'a>>>(name: N, location: Location) -> Self {
+        let state = unsafe { mlirOperationStateGet(name.into().0, location.0) };
+        Self(UnsafeCell::new(state), PhantomData)
+    }
+    pub fn add_attributes(self, named_attrs: &[NamedAttribute]) -> Self {
         unsafe {
-            let func_op = StringRef::new("func.func");
-            let _state = mlirOperationStateGet(func_op.0, location.0);
+            mlirOperationStateAddAttributes(
+                self.0.get(),
+                named_attrs.len() as _,
+                named_attrs.as_ptr() as _,
+            )
         }
-        unimplemented!()
+        self
+    }
+    pub fn add_attribute(self, named_attr: NamedAttribute) -> Self {
+        self.add_attributes(&[named_attr])
+    }
+    pub fn add_operands(self, values: &[Value]) -> Self {
+        unsafe {
+            mlirOperationStateAddOperands(self.0.get(), values.len() as _, values.as_ptr() as _)
+        }
+        self
+    }
+    pub fn add_operand(self, value: Value) -> Self {
+        self.add_operands(&[value])
+    }
+    pub fn add_results(self, values: &[Type]) -> Self {
+        unsafe {
+            mlirOperationStateAddResults(self.0.get(), values.len() as _, values.as_ptr() as _)
+        }
+        self
+    }
+    pub fn add_result(self, value: Type) -> Self {
+        self.add_results(&[value])
+    }
+    pub fn add_regions<const N: usize>(self, regions: [Region; N]) -> Self {
+        unsafe {
+            mlirOperationStateAddOwnedRegions(
+                self.0.get(),
+                regions.len() as _,
+                regions.as_ptr() as _,
+            )
+        }
+        std::mem::forget(regions);
+        self
+    }
+    pub fn add_region(self, region: Region) -> Self {
+        self.add_regions([region])
+    }
+    pub fn build(self) -> Operation<'ctx> {
+        let op = unsafe { mlirOperationCreate(self.0.get()) };
+        Operation(op, PhantomData)
+    }
+}
+
+impl Function<'_> {
+    pub fn new(
+        name: StringRef,
+        location: Location,
+        r#type: FunctionType,
+        visibility: Visibility,
+        region: Region,
+    ) -> Self {
+        let ctx = Context(unsafe { mlirLocationGetContext(location.0) }, location.1);
+        let op = OperationBuilder::new("func.func", location)
+            .add_attributes(&[
+                NamedAttribute::new(Identifer::new(ctx, "sym_name"), StringAttr::new(ctx, name)),
+                NamedAttribute::new(
+                    Identifer::new(ctx, "function_type"),
+                    TypeAttr::new(r#type.into()),
+                ),
+                NamedAttribute::new(
+                    Identifer::new(ctx, "sym_visibility"),
+                    StringAttr::new(
+                        ctx,
+                        match visibility {
+                            Visibility::Public => "public",
+                            Visibility::Private => "private",
+                            Visibility::Nested => "nested",
+                        },
+                    ),
+                ),
+            ])
+            .add_region(region)
+            .build();
+        Self(op, PhantomData)
+    }
+}
+
+impl TypeAttr<'_> {
+    pub fn new(ty: Type) -> Self {
+        Self(
+            unsafe { Attribute(mlirTypeAttrGet(ty.0), PhantomData) },
+            PhantomData,
+        )
     }
 }
 
@@ -192,11 +310,60 @@ impl FlatSymbolRefAttr<'_> {
 }
 
 impl StringAttr<'_> {
-    pub fn new(ctx: Context, value: StringRef) -> Self {
+    pub fn new<'a, S: Into<StringRef<'a>>>(ctx: Context, value: S) -> Self {
         Self(
-            unsafe { Attribute(mlirStringAttrGet(ctx.0, value.0), PhantomData) },
+            unsafe { Attribute(mlirStringAttrGet(ctx.0, value.into().0), PhantomData) },
             PhantomData,
         )
+    }
+}
+
+impl FunctionType<'_> {
+    pub fn new(ctx: Context, inputs: &[Type], results: &[Type]) -> Self {
+        let handle = unsafe {
+            mlirFunctionTypeGet(
+                ctx.0,
+                inputs.len() as _,
+                inputs.as_ptr() as _,
+                results.len() as _,
+                results.as_ptr() as _,
+            )
+        };
+        Self(Type(handle, PhantomData), PhantomData)
+    }
+}
+
+impl<'a> Identifer<'a> {
+    pub fn new<'b, S: Into<StringRef<'b>>>(ctx: Context, name: S) -> Self {
+        Self(
+            unsafe { mlirIdentifierGet(ctx.0, name.into().0) },
+            PhantomData,
+        )
+    }
+    pub fn as_string(&self) -> StringRef<'a> {
+        let str_ref = unsafe { mlirIdentifierStr(self.0) };
+        StringRef(str_ref, PhantomData)
+    }
+}
+
+impl<'a> NamedAttribute<'a> {
+    pub fn new<F: Into<Attribute<'a>>>(name: Identifer, attr: F) -> Self {
+        Self(
+            unsafe { mlirNamedAttributeGet(name.0, attr.into().0) },
+            PhantomData,
+        )
+    }
+}
+
+impl<'a> Region<'a> {
+    pub fn new(_ctx: Context<'a>) -> Self {
+        Self(unsafe { mlirRegionCreate() }, _ctx.1)
+    }
+}
+
+impl Drop for Region<'_> {
+    fn drop(&mut self) {
+        unsafe { mlirRegionDestroy(self.0) }
     }
 }
 
@@ -219,6 +386,28 @@ mod tests {
             module.set_name("test".into());
             let operation: Operation = module.into();
             println!("{}", operation);
+        });
+    }
+
+    #[test]
+    fn it_creates_function() {
+        Context::run(|ctx| {
+            let location = Location::file_line_col(ctx, "test.mlir".into(), 0, 0);
+            let module = Module::new(location);
+            module.set_name("test".into());
+            let function_type = FunctionType::new(ctx, &[], &[]);
+            let region = Region::new(ctx);
+            let function = Function::new(
+                "test".into(),
+                location,
+                function_type,
+                Visibility::Private,
+                region,
+            );
+            let block = module.get_block();
+            block.append_operation(function);
+            let operation: Operation = module.into();
+            println!("{operation}");
         });
     }
 }
