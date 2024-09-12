@@ -179,8 +179,38 @@ impl<'a> Type<'a> {
             self.1,
         )
     }
-    pub fn get_ref_type(&self, freezing: Attribute<'a>) -> Type<'a> {
-        Type(unsafe { reuseIRGetRefType(self.0, freezing.0) }, self.1)
+    pub fn get_ref_type(&self, freezing: Attribute<'a>) -> RefType<'a> {
+        RefType(
+            Type(unsafe { reuseIRGetRefType(self.0, freezing.0) }, self.1),
+            self.1,
+        )
+    }
+    pub fn get_mref_type(&self, atomic: Attribute<'a>) -> MRefType<'a> {
+        MRefType(
+            Type(unsafe { reuseIRGetMRefType(self.0, atomic.0) }, self.1),
+            self.1,
+        )
+    }
+}
+
+impl<'a> RcType<'a> {
+    pub fn get_nullable_type(&self) -> NullableType<'a> {
+        NullableType(
+            Type(unsafe { reuseIRGetNullableType(self.0 .0) }, self.1),
+            self.1,
+        )
+    }
+}
+
+impl<'a> CompositeType<'a> {
+    pub fn complete(&self, types: &[Type]) {
+        unsafe { reuseIRCompleteCompositeType(self.0 .0, types.len(), types.as_ptr() as _) }
+    }
+}
+
+impl<'a> UnionType<'a> {
+    pub fn complete(&self, types: &[Type]) {
+        unsafe { reuseIRCompleteUnionType(self.0 .0, types.len(), types.as_ptr() as _) }
     }
 }
 
