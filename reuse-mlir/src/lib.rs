@@ -8,7 +8,7 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 type ContextToken<'ctx> = PhantomData<*mut &'ctx ()>;
 
 macro_rules! wrapper {
-    ($name:ident, $mlir_name:ident) => {
+    ($name:ident, $mlir_name:ty) => {
         #[derive(Clone, Copy)]
         #[repr(transparent)]
         pub struct $name<'ctx>($mlir_name, ContextToken<'ctx>);
@@ -18,8 +18,8 @@ macro_rules! wrapper {
 macro_rules! into_attr {
     ($from:ident) => {
         impl<'a> From<$from<'a>> for Attribute<'a> {
-            fn from(attr: $from) -> Self {
-                Self(attr.0, PhantomData)
+            fn from(attr: $from<'a>) -> Self {
+                attr.0
             }
         }
     };
@@ -35,18 +35,17 @@ wrapper!(Type, MlirType);
 wrapper!(Value, MlirValue);
 wrapper!(Block, MlirBlock);
 wrapper!(Region, MlirRegion);
-wrapper!(Function, MlirOperation);
-wrapper!(FunctionType, MlirType);
-
-wrapper!(StringAttr, MlirAttribute);
+wrapper!(Function, Operation<'ctx>);
+wrapper!(FunctionType, Type<'ctx>);
+wrapper!(StringAttr, Attribute<'ctx>);
 into_attr!(StringAttr);
-wrapper!(IntegerAttr, MlirAttribute);
+wrapper!(IntegerAttr, Attribute<'ctx>);
 into_attr!(IntegerAttr);
-wrapper!(FlatSymbolRefAttr, MlirAttribute);
+wrapper!(FlatSymbolRefAttr, Attribute<'ctx>);
 into_attr!(FlatSymbolRefAttr);
-wrapper!(IndexAttr, MlirAttribute);
+wrapper!(IndexAttr, Attribute<'ctx>);
 into_attr!(IndexAttr);
-wrapper!(UnitAttr, MlirAttribute);
+wrapper!(UnitAttr, Attribute<'ctx>);
 into_attr!(UnitAttr);
 
 impl<'a> StringRef<'a> {
@@ -183,7 +182,7 @@ impl Function<'_> {
 impl FlatSymbolRefAttr<'_> {
     pub fn new(ctx: Context, symbol: StringRef) -> Self {
         Self(
-            unsafe { mlirFlatSymbolRefAttrGet(ctx.0, symbol.0) },
+            unsafe { Attribute(mlirFlatSymbolRefAttrGet(ctx.0, symbol.0), PhantomData) },
             PhantomData,
         )
     }
@@ -191,7 +190,10 @@ impl FlatSymbolRefAttr<'_> {
 
 impl StringAttr<'_> {
     pub fn new(ctx: Context, value: StringRef) -> Self {
-        Self(unsafe { mlirStringAttrGet(ctx.0, value.0) }, PhantomData)
+        Self(
+            unsafe { Attribute(mlirStringAttrGet(ctx.0, value.0), PhantomData) },
+            PhantomData,
+        )
     }
 }
 

@@ -19,7 +19,6 @@ if (REUSE_IR_ENABLE_TESTS)
   add_compile_definitions(REUSE_IR_ENABLE_TESTS=1)
 endif()
 
-add_subdirectory(contrib)
 add_subdirectory(include)
 add_subdirectory(src)
 
