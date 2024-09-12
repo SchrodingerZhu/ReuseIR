@@ -11,7 +11,6 @@ type ContextToken<'ctx> = PhantomData<*mut &'ctx ()>;
 
 macro_rules! wrapper {
     ($name:ident, $mlir_name:ty) => {
-        #[derive(Clone, Copy)]
         #[repr(transparent)]
         pub struct $name<'ctx>($mlir_name, ContextToken<'ctx>);
     };
@@ -31,10 +30,11 @@ wrapper!(Context, MlirContext);
 wrapper!(Module, MlirModule);
 wrapper!(Location, MlirLocation);
 wrapper!(StringRef, MlirStringRef);
-wrapper!(Operation, MlirOperation);
 wrapper!(Attribute, MlirAttribute);
 wrapper!(Type, MlirType);
 wrapper!(Value, MlirValue);
+wrapper!(Operation, MlirOperation);
+wrapper!(Region, MlirRegion);
 wrapper!(Block, MlirBlock);
 wrapper!(Function, Operation<'ctx>);
 impl_from!(Function, Operation);
@@ -55,8 +55,30 @@ impl_from!(TypeAttr, Attribute);
 wrapper!(Identifer, MlirIdentifier);
 wrapper!(NamedAttribute, MlirNamedAttribute);
 
-#[repr(transparent)]
-pub struct Region<'a>(MlirRegion, ContextToken<'a>);
+impl Copy for Context<'_> {}
+impl Clone for Context<'_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for Location<'_> {}
+impl Clone for Location<'_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for Attribute<'_> {}
+impl Clone for Attribute<'_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for Type<'_> {}
+impl Clone for Type<'_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
 
 impl<'a> StringRef<'a> {
     pub fn new(s: &str) -> Self {
@@ -113,31 +135,18 @@ impl<'a> Module<'a> {
         Self(unsafe { mlirModuleCreateEmpty(location.0) }, PhantomData)
     }
     pub fn set_name(&self, name: StringRef) {
-        let op: Operation = (*self).into();
-        op.set_attribute("sym_name", StringAttr::new(op.get_context(), name))
+        let op = Operation(unsafe { mlirModuleGetOperation(self.0) }, self.1);
+        op.set_attribute("sym_name", StringAttr::new(op.get_context(), name));
+        std::mem::forget(op);
     }
-    pub fn get_block(&self) -> Block<'a> {
-        unsafe { Block(mlirModuleGetBody(self.0), self.1) }
-    }
-}
-
-impl<'a> Block<'a> {
-    pub fn append_operation<O>(&self, op: O)
+    pub fn body<F>(&self, f: F)
     where
-        O: Into<Operation<'a>>,
+        F: FnOnce(&Block<'a>),
     {
-        unsafe {
-            mlirBlockAppendOwnedOperation(self.0, op.into().0);
-        }
-    }
-}
-
-impl<'a> From<Module<'a>> for Operation<'a> {
-    fn from(module: Module) -> Self {
-        unsafe {
-            let op = mlirModuleGetOperation(module.0);
-            Operation(op, PhantomData)
-        }
+        let handle = unsafe { mlirModuleGetBody(self.0) };
+        let block = Block(handle, self.1);
+        f(&block);
+        std::mem::forget(block);
     }
 }
 
@@ -393,11 +402,59 @@ impl<'a> Region<'a> {
     pub fn new(_ctx: Context<'a>) -> Self {
         Self(unsafe { mlirRegionCreate() }, _ctx.1)
     }
+    pub fn append_block(&self, block: Block) {
+        let handle = block.0;
+        std::mem::forget(block);
+        unsafe { mlirRegionAppendOwnedBlock(self.0, handle) }
+    }
+}
+
+impl<'a> Block<'a> {
+    pub fn new(_ctx: Context<'a>, types: &[Type], locs: &[Location]) -> Self {
+        let min = types.len().min(locs.len());
+        Self(
+            unsafe { mlirBlockCreate(min as _, types.as_ptr() as _, locs.as_ptr() as _) },
+            _ctx.1,
+        )
+    }
+    pub fn append_operation<O>(&self, op: O)
+    where
+        O: Into<Operation<'a>>,
+    {
+        let op = op.into();
+        unsafe { mlirBlockAppendOwnedOperation(self.0, op.0) };
+        std::mem::forget(op);
+    }
 }
 
 impl Drop for Region<'_> {
     fn drop(&mut self) {
         unsafe { mlirRegionDestroy(self.0) }
+    }
+}
+
+impl Drop for Block<'_> {
+    fn drop(&mut self) {
+        unsafe { mlirBlockDestroy(self.0) }
+    }
+}
+
+impl Drop for Operation<'_> {
+    fn drop(&mut self) {
+        unsafe { mlirOperationDestroy(self.0) }
+    }
+}
+impl Drop for Module<'_> {
+    fn drop(&mut self) {
+        unsafe { mlirModuleDestroy(self.0) }
+    }
+}
+impl std::fmt::Display for Module<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let op = Operation(unsafe { mlirModuleGetOperation(self.0) }, self.1);
+        let res = op.fmt(f);
+        std::mem::forget(op);
+        res
     }
 }
 
@@ -418,8 +475,7 @@ mod tests {
             let location = Location::file_line_col(ctx, "test.mlir".into(), 0, 0);
             let module = Module::new(location);
             module.set_name("test".into());
-            let operation: Operation = module.into();
-            println!("{}", operation);
+            println!("{}", module);
         });
     }
 
@@ -431,6 +487,10 @@ mod tests {
             module.set_name("test".into());
             let function_type = FunctionType::new(ctx, &[], &[]);
             let region = Region::new(ctx);
+            let block = Block::new(ctx, &[], &[]);
+            let ret = OperationBuilder::new("func.return", location).build();
+            block.append_operation(ret);
+            region.append_block(block);
             let function = Function::new(
                 "test".into(),
                 location,
@@ -438,10 +498,8 @@ mod tests {
                 Visibility::Private,
                 region,
             );
-            let block = module.get_block();
-            block.append_operation(function);
-            let operation: Operation = module.into();
-            println!("{operation}");
+            module.body(move |block| block.append_operation(function));
+            println!("{module}");
         });
     }
 }
