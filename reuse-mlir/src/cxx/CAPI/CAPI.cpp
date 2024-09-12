@@ -6,6 +6,8 @@
 #include "mlir/CAPI/Registration.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
+#include "mlir/IR/Attributes.h"
+#include <llvm-20/llvm/ADT/SmallVector.h>
 namespace mlir {
 namespace reuse_ir {
 extern "C" {
@@ -77,6 +79,44 @@ MlirType reuseIRGetRcType(MlirType inner, MlirAttribute atomicKind,
   return wrap(RcType::get(innerTy.getContext(), unwrap(inner),
                           cast<AtomicKindAttr>(unwrap(atomicKind)),
                           cast<FreezingKindAttr>(unwrap(freezeKind))));
+}
+MlirType reuseIRGetRefType(MlirType inner, MlirAttribute freezeKind) {
+  auto innerTy = unwrap(inner);
+  return wrap(RefType::get(innerTy.getContext(), unwrap(inner),
+                           cast<FreezingKindAttr>(unwrap(freezeKind))));
+}
+MlirType reuseIRGetMRefType(MlirType inner, MlirAttribute atomicKind) {
+  auto innerTy = unwrap(inner);
+  return wrap(MRefType::get(innerTy.getContext(), unwrap(inner),
+                            cast<AtomicKindAttr>(unwrap(atomicKind))));
+}
+MlirType reuseIRGetNullableType(MlirType inner) {
+  auto innerTy = unwrap(inner);
+  return wrap(NullableType::get(innerTy.getContext(), unwrap(inner)));
+}
+MlirType reuseIRGetCompositeType(MlirContext context, MlirStringRef name) {
+  auto ref = unwrap(name);
+  auto attr = StringAttr::get(unwrap(context), ref);
+  return wrap(CompositeType::get(unwrap(context), attr));
+}
+void reuseIRCompleteCompositeType(MlirType compositeType, size_t numInnerTypes,
+                                  const MlirType *innerTypes) {
+  auto compositeTy = cast<CompositeType>(unwrap(compositeType));
+  llvm::SmallVector<Type> innerTys;
+  auto ref = unwrapList(numInnerTypes, innerTypes, innerTys);
+  compositeTy.complete(ref);
+}
+MlirType reuseIRGetUnionType(MlirContext context, MlirStringRef name) {
+  auto ref = unwrap(name);
+  auto attr = StringAttr::get(unwrap(context), ref);
+  return wrap(UnionType::get(unwrap(context), attr));
+}
+void reuseIRCompleteUnionType(MlirType unionType, size_t numInnerTypes,
+                              const MlirType *innerTypes) {
+  auto unionTy = cast<UnionType>(unwrap(unionType));
+  llvm::SmallVector<Type> innerTys;
+  auto ref = unwrapList(numInnerTypes, innerTypes, innerTys);
+  unionTy.complete(ref);
 }
 } // extern "C"
 } // namespace reuse_ir

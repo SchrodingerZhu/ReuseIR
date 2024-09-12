@@ -67,7 +67,15 @@ MlirAttribute reuseIRAtomicKindGetAtomic(MlirContext);
 
 MlirType reuseIRGetRcType(MlirType inner, MlirAttribute atomicKind,
                           MlirAttribute freezeKind);
-
+MlirType reuseIRGetRefType(MlirType inner, MlirAttribute freezeKind);
+MlirType reuseIRGetMRefType(MlirType inner, MlirAttribute atomicKind);
+MlirType reuseIRGetNullableType(MlirType inner);
+MlirType reuseIRGetCompositeType(MlirContext context, MlirStringRef name);
+void reuseIRCompleteCompositeType(MlirType compositeType, size_t numInnerTypes,
+                                  const MlirType *innerTypes);
+MlirType reuseIRGetUnionType(MlirContext context, MlirStringRef name);
+void reuseIRCompleteUnionType(MlirType unionType, size_t numInnerTypes,
+                              const MlirType *innerTypes);
 #ifdef __cplusplus
 }
 #endif

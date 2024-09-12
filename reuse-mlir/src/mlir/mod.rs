@@ -155,6 +155,9 @@ impl<'a> Type<'a> {
             self.1,
         )
     }
+    pub fn get_ref_type(&self, freezing: Attribute<'a>) -> Type<'a> {
+        Type(unsafe { reuseIRGetRefType(self.0, freezing.0) }, self.1)
+    }
 }
 
 impl<'a> Module<'a> {
