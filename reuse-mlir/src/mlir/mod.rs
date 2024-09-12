@@ -1,7 +1,3 @@
-#![allow(non_upper_case_globals)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
-
 mod ffi;
 
 use ffi::*;
@@ -110,10 +106,10 @@ impl<'a> Location<'a> {
     }
 }
 
-impl Context<'_> {
+impl<'a> Context<'a> {
     pub fn run<F>(f: F)
     where
-        F: for<'a> FnOnce(Context<'a>),
+        F: for<'b> FnOnce(Context<'b>),
     {
         unsafe {
             let handle = mlirContextCreate();
@@ -128,6 +124,36 @@ impl Context<'_> {
             mlirDialectRegistryDestroy(registry);
             mlirContextDestroy(handle)
         }
+    }
+    pub fn get_integer_type(&self, width: u32) -> Type<'a> {
+        Type(unsafe { mlirIntegerTypeGet(self.0, width) }, self.1)
+    }
+    pub fn get_index_type(&self) -> Type<'a> {
+        Type(unsafe { mlirIndexTypeGet(self.0) }, self.1)
+    }
+    pub fn get_nonatomic(&self) -> Attribute<'a> {
+        Attribute(unsafe { reuseIRAtomicKindGetNonatomic(self.0) }, self.1)
+    }
+    pub fn get_atomic(&self) -> Attribute<'a> {
+        Attribute(unsafe { reuseIRAtomicKindGetAtomic(self.0) }, self.1)
+    }
+    pub fn get_nonfreezing(&self) -> Attribute<'a> {
+        Attribute(unsafe { reuseIRFreezingKindGetNonfreezing(self.0) }, self.1)
+    }
+    pub fn get_frozen(&self) -> Attribute<'a> {
+        Attribute(unsafe { reuseIRFreezingKindGetFrozen(self.0) }, self.1)
+    }
+    pub fn get_unfrozen(&self) -> Attribute<'a> {
+        Attribute(unsafe { reuseIRFreezingKindGetUnfrozen(self.0) }, self.1)
+    }
+}
+
+impl<'a> Type<'a> {
+    pub fn get_rc_type(&self, atomic: Attribute<'a>, freezing: Attribute<'a>) -> Type<'a> {
+        Type(
+            unsafe { reuseIRGetRcType(self.0, atomic.0, freezing.0) },
+            self.1,
+        )
     }
 }
 
@@ -489,6 +515,17 @@ mod tests {
             function.set_linkage(LLVMLinkage::Private);
             module.body(move |block| block.append_operation(function));
             println!("{module}");
+        });
+    }
+
+    #[test]
+    fn it_creates_rc_type() {
+        Context::run(|ctx| {
+            let atomic = ctx.get_atomic();
+            let freezing = ctx.get_frozen();
+            let ty = ctx.get_integer_type(32);
+            let rc_ty = ty.get_rc_type(atomic, freezing);
+            println!("{}", rc_ty);
         });
     }
 }

@@ -56,7 +56,17 @@ enum Linkage : unsigned {
   EXTERNAL
 };
 
-extern void reuseIRSetLinkageForFunc(MlirOperation, enum Linkage);
+void reuseIRSetLinkageForFunc(MlirOperation, enum Linkage);
+
+MlirAttribute reuseIRFreezingKindGetNonfreezing(MlirContext);
+MlirAttribute reuseIRFreezingKindGetUnfrozen(MlirContext);
+MlirAttribute reuseIRFreezingKindGetFrozen(MlirContext);
+
+MlirAttribute reuseIRAtomicKindGetNonatomic(MlirContext);
+MlirAttribute reuseIRAtomicKindGetAtomic(MlirContext);
+
+MlirType reuseIRGetRcType(MlirType inner, MlirAttribute atomicKind,
+                          MlirAttribute freezeKind);
 
 #ifdef __cplusplus
 }

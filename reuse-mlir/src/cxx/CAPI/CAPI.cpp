@@ -1,5 +1,8 @@
 #include "ReuseIR/CAPI.h"
 #include "ReuseIR/IR/ReuseIRDialect.h"
+#include "ReuseIR/IR/ReuseIROps.h"
+#include "ReuseIR/IR/ReuseIROpsEnums.h"
+#include "mlir/CAPI/Pass.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
@@ -49,6 +52,31 @@ void reuseIRSetLinkageForFunc(MlirOperation op, Linkage linkage) {
   }
   funcOp->setAttr("llvm.linkage", mlir::LLVM::LinkageAttr::get(
                                       funcOp->getContext(), llvmLinkage));
+}
+
+MlirAttribute reuseIRFreezingKindGetNonfreezing(MlirContext context) {
+  return wrap(
+      FreezingKindAttr::get(unwrap(context), FreezingKind::nonfreezing));
+}
+MlirAttribute reuseIRFreezingKindGetUnfrozen(MlirContext context) {
+  return wrap(FreezingKindAttr::get(unwrap(context), FreezingKind::unfrozen));
+}
+MlirAttribute reuseIRFreezingKindGetFrozen(MlirContext context) {
+  return wrap(FreezingKindAttr::get(unwrap(context), FreezingKind::frozen));
+}
+
+MlirAttribute reuseIRAtomicKindGetNonatomic(MlirContext context) {
+  return wrap(AtomicKindAttr::get(unwrap(context), AtomicKind::nonatomic));
+}
+MlirAttribute reuseIRAtomicKindGetAtomic(MlirContext context) {
+  return wrap(AtomicKindAttr::get(unwrap(context), AtomicKind::atomic));
+}
+MlirType reuseIRGetRcType(MlirType inner, MlirAttribute atomicKind,
+                          MlirAttribute freezeKind) {
+  auto innerTy = unwrap(inner);
+  return wrap(RcType::get(innerTy.getContext(), unwrap(inner),
+                          cast<AtomicKindAttr>(unwrap(atomicKind)),
+                          cast<FreezingKindAttr>(unwrap(freezeKind))));
 }
 } // extern "C"
 } // namespace reuse_ir
