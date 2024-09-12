@@ -7,7 +7,6 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/IR/Attributes.h"
-#include <llvm-20/llvm/ADT/SmallVector.h>
 namespace mlir {
 namespace reuse_ir {
 extern "C" {
