@@ -122,10 +122,10 @@ fn main() {
         .join("build")
         .join("lib");
     println!("cargo:rustc-link-search=native={}", dst.display());
+    println!("cargo:rustc-link-lib=static=MLIRReuseIRCAPI");
     println!("cargo:rustc-link-lib=static=MLIRReuseIR");
     println!("cargo:rustc-link-lib=static=MLIRReuseIRPasses");
     println!("cargo:rustc-link-lib=static=MLIRReuseIRAnalysis");
     println!("cargo:rustc-link-lib=static=MLIRReuseIRInterfaces");
-    println!("cargo:rustc-link-lib=static=MLIRReuseIRCAPI");
     mlir::run().unwrap();
 }

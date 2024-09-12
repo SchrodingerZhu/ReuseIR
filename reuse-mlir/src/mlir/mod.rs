@@ -10,6 +10,15 @@ macro_rules! wrapper {
         #[repr(transparent)]
         pub struct $name<'ctx>($mlir_name, ContextToken<'ctx>);
     };
+    ($name:ident, $mlir_name:ty, copy) => {
+        wrapper!($name, $mlir_name);
+        impl<'a> Copy for $name<'a> {}
+        impl<'a> Clone for $name<'a> {
+            fn clone(&self) -> Self {
+                *self
+            }
+        }
+    };
 }
 
 macro_rules! impl_from {
@@ -22,19 +31,19 @@ macro_rules! impl_from {
     };
 }
 
-wrapper!(Context, MlirContext);
+wrapper!(Context, MlirContext, copy);
 wrapper!(Module, MlirModule);
-wrapper!(Location, MlirLocation);
+wrapper!(Location, MlirLocation, copy);
 wrapper!(StringRef, MlirStringRef);
-wrapper!(Attribute, MlirAttribute);
-wrapper!(Type, MlirType);
+wrapper!(Attribute, MlirAttribute, copy);
+wrapper!(Type, MlirType, copy);
 wrapper!(Value, MlirValue);
 wrapper!(Operation, MlirOperation);
 wrapper!(Region, MlirRegion);
 wrapper!(Block, MlirBlock);
 wrapper!(Function, Operation<'ctx>);
 impl_from!(Function, Operation);
-wrapper!(FunctionType, Type<'ctx>);
+wrapper!(FunctionType, Type<'ctx>, copy);
 impl_from!(FunctionType, Type);
 wrapper!(StringAttr, Attribute<'ctx>);
 impl_from!(StringAttr, Attribute);
@@ -51,30 +60,18 @@ impl_from!(TypeAttr, Attribute);
 wrapper!(Identifer, MlirIdentifier);
 wrapper!(NamedAttribute, MlirNamedAttribute);
 
-impl Copy for Context<'_> {}
-impl Clone for Context<'_> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl Copy for Location<'_> {}
-impl Clone for Location<'_> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl Copy for Attribute<'_> {}
-impl Clone for Attribute<'_> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl Copy for Type<'_> {}
-impl Clone for Type<'_> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
+wrapper!(CompositeType, Type<'ctx>, copy);
+impl_from!(CompositeType, Type);
+wrapper!(UnionType, Type<'ctx>, copy);
+impl_from!(UnionType, Type);
+wrapper!(RcType, Type<'ctx>, copy);
+impl_from!(RcType, Type);
+wrapper!(RefType, Type<'ctx>, copy);
+impl_from!(RefType, Type);
+wrapper!(MRefType, Type<'ctx>, copy);
+impl_from!(MRefType, Type);
+wrapper!(NullableType, Type<'ctx>, copy);
+impl_from!(NullableType, Type);
 
 impl<'a> StringRef<'a> {
     pub fn new(s: &str) -> Self {
@@ -146,14 +143,74 @@ impl<'a> Context<'a> {
     pub fn get_unfrozen(&self) -> Attribute<'a> {
         Attribute(unsafe { reuseIRFreezingKindGetUnfrozen(self.0) }, self.1)
     }
+    pub fn get_composite_type<S>(&self, name: S) -> CompositeType<'a>
+    where
+        S: Into<StringRef<'a>>,
+    {
+        CompositeType(
+            Type(
+                unsafe { reuseIRGetCompositeType(self.0, name.into().0) },
+                self.1,
+            ),
+            self.1,
+        )
+    }
+    pub fn get_union_type<S>(&self, name: S) -> UnionType<'a>
+    where
+        S: Into<StringRef<'a>>,
+    {
+        UnionType(
+            Type(
+                unsafe { reuseIRGetUnionType(self.0, name.into().0) },
+                self.1,
+            ),
+            self.1,
+        )
+    }
 }
 
 impl<'a> Type<'a> {
-    pub fn get_rc_type(&self, atomic: Attribute<'a>, freezing: Attribute<'a>) -> Type<'a> {
-        Type(
-            unsafe { reuseIRGetRcType(self.0, atomic.0, freezing.0) },
+    pub fn get_rc_type(&self, atomic: Attribute<'a>, freezing: Attribute<'a>) -> RcType<'a> {
+        RcType(
+            Type(
+                unsafe { reuseIRGetRcType(self.0, atomic.0, freezing.0) },
+                self.1,
+            ),
             self.1,
         )
+    }
+    pub fn get_ref_type(&self, freezing: Attribute<'a>) -> RefType<'a> {
+        RefType(
+            Type(unsafe { reuseIRGetRefType(self.0, freezing.0) }, self.1),
+            self.1,
+        )
+    }
+    pub fn get_mref_type(&self, atomic: Attribute<'a>) -> MRefType<'a> {
+        MRefType(
+            Type(unsafe { reuseIRGetMRefType(self.0, atomic.0) }, self.1),
+            self.1,
+        )
+    }
+}
+
+impl<'a> RcType<'a> {
+    pub fn get_nullable_type(&self) -> NullableType<'a> {
+        NullableType(
+            Type(unsafe { reuseIRGetNullableType(self.0 .0) }, self.1),
+            self.1,
+        )
+    }
+}
+
+impl<'a> CompositeType<'a> {
+    pub fn complete(&self, types: &[Type]) {
+        unsafe { reuseIRCompleteCompositeType(self.0 .0, types.len(), types.as_ptr() as _) }
+    }
+}
+
+impl<'a> UnionType<'a> {
+    pub fn complete(&self, types: &[Type]) {
+        unsafe { reuseIRCompleteUnionType(self.0 .0, types.len(), types.as_ptr() as _) }
     }
 }
 
@@ -525,7 +582,25 @@ mod tests {
             let freezing = ctx.get_frozen();
             let ty = ctx.get_integer_type(32);
             let rc_ty = ty.get_rc_type(atomic, freezing);
-            println!("{}", rc_ty);
+            println!("{}", Into::<Type>::into(rc_ty));
+        });
+    }
+
+    #[test]
+    fn it_creates_cyclic_type() {
+        Context::run(|ctx| {
+            let nf = ctx.get_nonfreezing();
+            let union_ty = ctx.get_union_type("foo");
+            let composite_ty = ctx.get_composite_type("bar");
+            let raw_union: Type = union_ty.into();
+            let raw_composite: Type = composite_ty.into();
+            let union_rc = raw_union.get_rc_type(ctx.get_atomic(), nf);
+            let composite_rc = raw_composite.get_rc_type(ctx.get_atomic(), nf);
+            let i64ty = ctx.get_integer_type(64);
+            union_ty.complete(&[i64ty, composite_rc.into()]);
+            composite_ty.complete(&[i64ty, union_rc.into()]);
+            let nullable_ty = union_rc.get_nullable_type();
+            println!("{}", Into::<Type>::into(nullable_ty));
         });
     }
 }
