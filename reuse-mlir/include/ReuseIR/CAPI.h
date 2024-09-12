@@ -36,4 +36,28 @@
 #include <mlir-c/Support.h>
 #include <mlir-c/Target/LLVMIR.h>
 #include <mlir-c/Transforms.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(ReuseIR, reuse_ir);
+
+enum Linkage : unsigned {
+  PRIVATE,
+  INTERNAL,
+  AVAILABLE_EXTERNALLY,
+  LINKONCE,
+  WEAK,
+  COMMON,
+  APPENDING,
+  EXTERN_WEAK,
+  LINKONCE_ODR,
+  WEAK_ODR,
+  EXTERNAL
+};
+
+extern void reuseIRSetLinkageForFunc(MlirOperation, enum Linkage);
+
+#ifdef __cplusplus
+}
+#endif

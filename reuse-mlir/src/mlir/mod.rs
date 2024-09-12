@@ -121,6 +121,7 @@ impl Context<'_> {
             let reuse_ir = mlirGetDialectHandle__reuse_ir__();
             mlirRegisterAllDialects(registry);
             mlirDialectHandleInsertDialect(reuse_ir, registry);
+            mlirContextAppendDialectRegistry(handle, registry);
             mlirContextLoadAllAvailableDialects(handle);
             let context = Context(handle, PhantomData);
             f(context);
@@ -269,6 +270,21 @@ impl<'ctx> OperationBuilder<'ctx> {
     }
 }
 
+#[repr(u32)]
+pub enum LLVMLinkage {
+    Private,
+    Internal,
+    AvailableExternally,
+    Linkonce,
+    Weak,
+    Common,
+    Appending,
+    ExternWeak,
+    LinkonceODR,
+    WeakODR,
+    External,
+}
+
 impl Function<'_> {
     pub fn new(
         name: StringRef,
@@ -300,6 +316,9 @@ impl Function<'_> {
             .add_region(region)
             .build();
         Self(op, PhantomData)
+    }
+    pub fn set_linkage(&self, linkage: LLVMLinkage) {
+        unsafe { reuseIRSetLinkageForFunc(self.0 .0, linkage as _) };
     }
 }
 
@@ -467,6 +486,7 @@ mod tests {
                 Visibility::Private,
                 region,
             );
+            function.set_linkage(LLVMLinkage::Private);
             module.body(move |block| block.append_operation(function));
             println!("{module}");
         });

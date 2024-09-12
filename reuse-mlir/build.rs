@@ -2,7 +2,7 @@ mod mlir {
     use std::{env, error::Error, fs, io, path::Path, process::Command, str};
 
     pub fn run() -> Result<(), Box<dyn Error>> {
-        println!("cargo:rerun-if-changed=include/CAPI.h");
+        println!("cargo:rerun-if-changed=include/ReuseIR/CAPI.h");
         let libdir = llvm_config("--libdir")?;
         println!("cargo:rustc-link-search={}", llvm_config("--libdir")?);
         println!("cargo:rustc-link-lib=MLIR");
@@ -64,7 +64,7 @@ mod mlir {
         }
 
         bindgen::builder()
-            .header("include/CAPI.h")
+            .header("include/ReuseIR/CAPI.h")
             .clang_arg(format!("-I{}", llvm_config("--includedir")?))
             .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
             .generate()
