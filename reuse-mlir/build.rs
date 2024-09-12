@@ -3,9 +3,11 @@ mod mlir {
 
     pub fn run() -> Result<(), Box<dyn Error>> {
         println!("cargo:rerun-if-changed=include/CAPI.h");
+        let libdir = llvm_config("--libdir")?;
         println!("cargo:rustc-link-search={}", llvm_config("--libdir")?);
-
-        for name in fs::read_dir(llvm_config("--libdir")?)?
+        println!("cargo:rustc-link-lib=MLIR");
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libdir);
+        for name in fs::read_dir(libdir)?
             .map(|entry| {
                 Ok(if let Some(name) = entry?.path().file_name() {
                     name.to_str().map(String::from)
@@ -17,11 +19,7 @@ mod mlir {
             .into_iter()
             .flatten()
         {
-            if name.starts_with("libMLIR")
-                && name.ends_with(".a")
-                && !name.contains("Main")
-                && name != "libMLIRSupportIndentedOstream.a"
-            {
+            if name.starts_with("libMLIRCAPI") && name.ends_with(".a") {
                 if let Some(name) = trim_library_name(&name) {
                     println!("cargo:rustc-link-lib=static={}", name);
                 }
