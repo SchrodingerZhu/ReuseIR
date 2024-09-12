@@ -15,9 +15,9 @@ macro_rules! wrapper {
     };
 }
 
-macro_rules! into_attr {
-    ($from:ident) => {
-        impl<'a> From<$from<'a>> for Attribute<'a> {
+macro_rules! impl_from {
+    ($from:ident, $to:ident) => {
+        impl<'a> From<$from<'a>> for $to<'a> {
             fn from(attr: $from<'a>) -> Self {
                 attr.0
             }
@@ -36,17 +36,19 @@ wrapper!(Value, MlirValue);
 wrapper!(Block, MlirBlock);
 wrapper!(Region, MlirRegion);
 wrapper!(Function, Operation<'ctx>);
+impl_from!(Function, Operation);
 wrapper!(FunctionType, Type<'ctx>);
+impl_from!(FunctionType, Type);
 wrapper!(StringAttr, Attribute<'ctx>);
-into_attr!(StringAttr);
+impl_from!(StringAttr, Attribute);
 wrapper!(IntegerAttr, Attribute<'ctx>);
-into_attr!(IntegerAttr);
+impl_from!(IntegerAttr, Attribute);
 wrapper!(FlatSymbolRefAttr, Attribute<'ctx>);
-into_attr!(FlatSymbolRefAttr);
+impl_from!(FlatSymbolRefAttr, Attribute);
 wrapper!(IndexAttr, Attribute<'ctx>);
-into_attr!(IndexAttr);
+impl_from!(IndexAttr, Attribute);
 wrapper!(UnitAttr, Attribute<'ctx>);
-into_attr!(UnitAttr);
+impl_from!(UnitAttr, Attribute);
 
 impl<'a> StringRef<'a> {
     pub fn new(s: &str) -> Self {
@@ -168,6 +170,7 @@ macro_rules! impl_display {
 impl_display!(Operation, mlirOperationPrint);
 impl_display!(Type, mlirTypePrint);
 impl_display!(Attribute, mlirAttributePrint);
+impl_display!(Value, mlirValuePrint);
 
 impl Function<'_> {
     pub fn new(_name: StringRef, location: Location) -> Self {
