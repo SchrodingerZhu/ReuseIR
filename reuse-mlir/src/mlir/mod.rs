@@ -210,18 +210,6 @@ pub enum Visibility {
     Nested,
 }
 
-pub enum LLVMLinkage {
-    External,
-    AvailableExternally,
-    Linkonce,
-    LinkonceODR,
-    Weak,
-    WeakODR,
-    Appending,
-    Internal,
-    Private,
-}
-
 #[repr(transparent)]
 pub struct OperationBuilder<'ctx>(UnsafeCell<MlirOperationState>, ContextToken<'ctx>);
 
@@ -312,25 +300,6 @@ impl Function<'_> {
             .add_region(region)
             .build();
         Self(op, PhantomData)
-    }
-
-    pub fn set_linkage(&self, linkage: LLVMLinkage) {
-        let linkage = match linkage {
-            LLVMLinkage::External => MlirLLVMLinkage_MlirLLVMLinkageExternal,
-            LLVMLinkage::AvailableExternally => MlirLLVMLinkage_MlirLLVMLinkageAvailableExternally,
-            LLVMLinkage::Linkonce => MlirLLVMLinkage_MlirLLVMLinkageLinkonce,
-            LLVMLinkage::LinkonceODR => MlirLLVMLinkage_MlirLLVMLinkageLinkonceODR,
-            LLVMLinkage::Weak => MlirLLVMLinkage_MlirLLVMLinkageWeak,
-            LLVMLinkage::WeakODR => MlirLLVMLinkage_MlirLLVMLinkageWeakODR,
-            LLVMLinkage::Appending => MlirLLVMLinkage_MlirLLVMLinkageAppending,
-            LLVMLinkage::Internal => MlirLLVMLinkage_MlirLLVMLinkageInternal,
-            LLVMLinkage::Private => MlirLLVMLinkage_MlirLLVMLinkagePrivate,
-        };
-        let attr = unsafe {
-            let ctx = self.0.get_context();
-            Attribute(mlirLLVMLinkageAttrGet(ctx.0, linkage), ctx.1)
-        };
-        self.0.set_attribute("llvm.linkage", attr);
     }
 }
 
