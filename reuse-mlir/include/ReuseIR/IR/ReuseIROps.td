@@ -452,6 +452,64 @@ def ClosureVTableOp : ReuseIR_Op<"closure.vtable"> {
   }];
 }
 
+def ClosureApplyOp : ReuseIR_Op<"closure.apply"> {
+  let summary = "Apply one more argument to the closure";
+  let description = [{
+    `closure.apply` adds one more argument to the closure's argpack.
+    This operation "consumes" both the closure and the argument. The RC shall be increased
+    if relevant objects are still to be used after the operation.
+  }];
+  let results = (outs Res<ReuseIR_ClosureType, "Result">:$result);
+  let arguments = (ins ReuseIR_ClosureType:$closure, Variadic<AnyType>:$args);
+  let assemblyFormat = [{
+    $closure `(` $args `)` attr-dict `:` functional-type(operands, results)
+  }];
+  let hasVerifier = 1;
+}
+
+def ClosureEvalOp : ReuseIR_Op<"closure.eval"> {
+  let summary = "Evaluate a fully applied closure";
+  let description = [{
+    `closure.eval` evaluates a fully applied closure. 
+    The operation consumes the closure.
+  }];
+  let results = (outs Res<AnyType, "Result">:$result);
+  let arguments = (ins ReuseIR_ClosureType:$closure);
+  let assemblyFormat = [{
+    `(` $closure `)` attr-dict `:` functional-type(operands, results)
+  }];
+  let hasVerifier = 1;
+}
+
+def RcUniquifyOp : ReuseIR_Op<"rc.uniquify"> {
+  let summary = "Make sure the underlying object is unique";
+  let description = [{
+    `rc.uniquify` makes sure the underlying object is unique.
+    - If the count is 1, it returns the object itself.
+    - Otherwise, it clones the object and returns the new object. 
+      The original rc is dropped.
+  }];
+  let results = (outs Res<ReuseIR_RcType, "Unique Rc Object">:$result);
+  let arguments = (ins ReuseIR_RcType:$rc);
+  let assemblyFormat = [{
+    `(` $rc `:` type($rc) `)` attr-dict `:` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def RcIsUniqueOp : ReuseIR_Op<"rc.is_unique"> {
+  let summary = "Check if the underlying object is unique";
+  let description = [{
+    `rc.is_unique` checks if the underlying object is unique.
+  }];
+  let results = (outs Res<I1, "Unique Flag">:$result);
+  let arguments = (ins ReuseIR_RcType:$rc);
+  let assemblyFormat = [{
+    `(` $rc `:` type($rc) `)` attr-dict `:` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
 def RcAsPtrOp : ReuseIR_Op<"rc.as_ptr"> {
   let summary = "Cast rc pointer to LLVM opaque pointer";
   let description = [{

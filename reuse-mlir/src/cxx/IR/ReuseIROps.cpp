@@ -353,6 +353,15 @@ mlir::LogicalResult RcFreezeOp::verify() {
     return emitOpError("must return a frozen RC pointer");
   return mlir::success();
 }
+
+// ClosureApplyOp verification
+mlir::LogicalResult ClosureApplyOp::verify() { llvm_unreachable("TODO"); }
+// ClosureEvalOp verification
+mlir::LogicalResult ClosureEvalOp::verify() { llvm_unreachable("TODO"); }
+// RcIsUniqueOp verification
+mlir::LogicalResult RcIsUniqueOp::verify() { llvm_unreachable("TODO"); }
+// RcUniquifyOp verification
+mlir::LogicalResult RcUniquifyOp::verify() { llvm_unreachable("TODO"); }
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 
