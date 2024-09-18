@@ -7,10 +7,12 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/IR/TypeRange.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
+#include <llvm-20/llvm/ADT/SmallVector.h>
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
@@ -355,13 +357,64 @@ mlir::LogicalResult RcFreezeOp::verify() {
 }
 
 // ClosureApplyOp verification
-mlir::LogicalResult ClosureApplyOp::verify() { llvm_unreachable("TODO"); }
+mlir::LogicalResult ClosureApplyOp::verify() {
+  RcType inputTy = getClosure().getType();
+  ClosureType inputClosure = dyn_cast<ClosureType>(inputTy.getPointee());
+  RcType outputTy = getType();
+  ClosureType outputClosure = dyn_cast<ClosureType>(outputTy.getPointee());
+  if (!inputClosure)
+    return emitOpError("must operate on a RC pointer to a closure type");
+  if (!outputClosure)
+    return emitOpError("must return a RC pointer to a closure type");
+  TypeRange allInputTypes = inputClosure.getInputTypes();
+  TypeRange actualInputTypes = getArgs().getTypes();
+  if (actualInputTypes.size() > allInputTypes.size())
+    return emitOpError("too many arguments");
+  TypeRange slicedInputTypes =
+      allInputTypes.take_front(actualInputTypes.size());
+  if (actualInputTypes != slicedInputTypes)
+    return emitOpError(
+        "the types of arguments must match the leading input types in "
+        "the closure type");
+  TypeRange afterInputTypes = allInputTypes.drop_front(actualInputTypes.size());
+  SmallVector<Type> afterInputTypesVec(afterInputTypes.begin(),
+                                       afterInputTypes.end());
+  ClosureType expectedOutputClosure = ClosureType::get(
+      getContext(), afterInputTypesVec, inputClosure.getOutputType());
+  if (outputClosure != expectedOutputClosure)
+    return emitOpError("expected to return a RC pointer to ")
+           << expectedOutputClosure << ", but found a RC pointer to "
+           << outputClosure;
+  return mlir::success();
+}
 // ClosureEvalOp verification
-mlir::LogicalResult ClosureEvalOp::verify() { llvm_unreachable("TODO"); }
+mlir::LogicalResult ClosureEvalOp::verify() {
+  RcType inputTy = getClosure().getType();
+  ClosureType inner = dyn_cast<ClosureType>(inputTy.getPointee());
+  if (!inner)
+    return emitOpError("must evaluate a RC pointer to a closure type");
+  if (inner.getInputTypes().size() != 0)
+    return emitOpError("must evaluate a fully applied closure");
+  if (inner.getOutputType() != getType())
+    return emitOpError("expected to return a value of ")
+           << inner.getOutputType() << ", but " << getType()
+           << " is found instead";
+  return mlir::success();
+}
 // RcIsUniqueOp verification
-mlir::LogicalResult RcIsUniqueOp::verify() { llvm_unreachable("TODO"); }
+mlir::LogicalResult RcIsUniqueOp::verify() {
+  if (getRc().getType().getFreezingKind().getValue() !=
+      FreezingKind::nonfreezing)
+    return emitOpError("can only be applied to a nonfreezing RC pointer");
+  return mlir::success();
+}
 // RcUniquifyOp verification
-mlir::LogicalResult RcUniquifyOp::verify() { llvm_unreachable("TODO"); }
+mlir::LogicalResult RcUniquifyOp::verify() {
+  if (getRc().getType().getFreezingKind().getValue() !=
+      FreezingKind::nonfreezing)
+    return emitOpError("can only be applied to a nonfreezing RC pointer");
+  return mlir::success();
+}
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 
