@@ -319,14 +319,15 @@ def CloneOp : ReuseIR_Op<"clone"> {
     it will increase the reference count of sub fields if necessary.
   }];
 
-  // TODO: Add type restrictions
   let arguments = (ins 
-    Arg<ReuseIR_RefType, "clonable object", [MemRead, MemAlloc<DefaultResource>]>:$object,
+    Arg<ReuseIR_RefType, "clonable object">:$object,
     OptionalAttr<IndexAttr>:$tag
   );
 
+  let results = (outs Res<AnyType, "Cloned Object">:$result);
+
   let assemblyFormat = [{
-    `(` $object `:` type($object) `)` (`tag` `(` $tag^ `)`)? attr-dict
+    `(` $object `:` type($object) `)` (`tag` `(` $tag^ `)`)? attr-dict `:` type($result)
   }];
 }
 
