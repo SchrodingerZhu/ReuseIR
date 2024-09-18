@@ -126,11 +126,13 @@ public:
     std::string lambdaCloneName = (lambdaName + llvm::Twine("$$clone")).str();
     std::string lambdaDropName = (lambdaName + llvm::Twine("$$drop")).str();
     std::string lambdaVtableName = (lambdaName + llvm::Twine("$$vtable")).str();
+    auto refOfClosureTy =
+        RefType::get(getContext(), op.getResult().getType(), nonfreezing);
     auto funcTy = FunctionType::get(getContext(), argPackRefTy,
                                     op.getClosureType().getOutputType());
-    auto cloneTy =
-        FunctionType::get(getContext(), {argPackRefTy, rewriter.getIndexType()},
-                          op.getResult().getType());
+    auto cloneTy = FunctionType::get(getContext(),
+                                     {refOfClosureTy, rewriter.getIndexType()},
+                                     op.getResult().getType());
     auto dropTy = FunctionType::get(
         getContext(), {argPackRefTy, rewriter.getIndexType()}, {});
     rewriter.setInsertionPoint(funcOp);
