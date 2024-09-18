@@ -128,8 +128,9 @@ public:
     std::string lambdaVtableName = (lambdaName + llvm::Twine("$$vtable")).str();
     auto funcTy = FunctionType::get(getContext(), argPackRefTy,
                                     op.getClosureType().getOutputType());
-    auto cloneTy = FunctionType::get(
-        getContext(), {argPackRefTy, rewriter.getIndexType()}, argPackRefTy);
+    auto cloneTy =
+        FunctionType::get(getContext(), {argPackRefTy, rewriter.getIndexType()},
+                          op.getResult().getType());
     auto dropTy = FunctionType::get(
         getContext(), {argPackRefTy, rewriter.getIndexType()}, {});
     rewriter.setInsertionPoint(funcOp);
