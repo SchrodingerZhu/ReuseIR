@@ -27,7 +27,7 @@ jobs:
             sudo touch "/usr/lib/llvm-${{matrix.version}}/lib/libLibcTableGenUtil.a"
       - name: Install LLVM Lit
         run: |
-            pip install lit --break-system-packages
+            pip install lit
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
