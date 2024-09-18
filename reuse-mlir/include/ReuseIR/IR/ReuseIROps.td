@@ -459,8 +459,8 @@ def ClosureApplyOp : ReuseIR_Op<"closure.apply"> {
     This operation "consumes" both the closure and the argument. The RC shall be increased
     if relevant objects are still to be used after the operation.
   }];
-  let results = (outs Res<ReuseIR_ClosureType, "Result">:$result);
-  let arguments = (ins ReuseIR_ClosureType:$closure, Variadic<AnyType>:$args);
+  let results = (outs Res<ReuseIR_RcTypeOf<[ReuseIR_ClosureType]>, "Result">:$result);
+  let arguments = (ins ReuseIR_RcTypeOf<[ReuseIR_ClosureType]>:$closure, Variadic<AnyType>:$args);
   let assemblyFormat = [{
     $closure `(` $args `)` attr-dict `:` functional-type(operands, results)
   }];
@@ -474,7 +474,7 @@ def ClosureEvalOp : ReuseIR_Op<"closure.eval"> {
     The operation consumes the closure.
   }];
   let results = (outs Res<AnyType, "Result">:$result);
-  let arguments = (ins ReuseIR_ClosureType:$closure);
+  let arguments = (ins ReuseIR_RcTypeOf<[ReuseIR_ClosureType]>:$closure);
   let assemblyFormat = [{
     `(` $closure `)` attr-dict `:` functional-type(operands, results)
   }];
