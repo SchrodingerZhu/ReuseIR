@@ -12,7 +12,6 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
-#include <llvm-20/llvm/ADT/SmallVector.h>
 
 namespace mlir {
 namespace REUSE_IR_DECL_SCOPE {
