@@ -309,6 +309,100 @@ public:
   }
 };
 
+class CloneExpansionPattern : public OpRewritePattern<CloneOp> {
+  bool needClonePreprocess(Type type) const {
+    if (type.isIntOrIndexOrFloat() || isa<MRefType>(type))
+      return false;
+    if (auto compositeTy = dyn_cast<CompositeType>(type)) {
+      return std::any_of(compositeTy.getInnerTypes().begin(),
+                         compositeTy.getInnerTypes().end(),
+                         [&](Type ty) { return needClonePreprocess(ty); });
+    }
+    if (auto arrayTy = dyn_cast<ArrayType>(type))
+      return needClonePreprocess(arrayTy.getElementType());
+    if (auto unionTy = dyn_cast<UnionType>(type))
+      return std::any_of(unionTy.getInnerTypes().begin(),
+                         unionTy.getInnerTypes().end(),
+                         [&](Type ty) { return needClonePreprocess(ty); });
+    return true;
+  }
+  void generateClonePreprocess(PatternRewriter &rewriter, Value target) const {
+    auto refTy = cast<RefType>(target.getType());
+    // primitive types
+    if (!needClonePreprocess(refTy.getPointee()))
+      return;
+
+    // rc pointer, apply RcAcquireOp
+    if (auto rcTy = dyn_cast<RcType>(refTy.getPointee())) {
+      auto loaded = rewriter.create<LoadOp>(target.getLoc(), rcTy, target);
+      rewriter.create<RcAcquireOp>(target.getLoc(), loaded);
+    }
+
+    // for composite type, iterate through the fields and generate the destroy
+    // recursively
+    if (auto compositeTy = dyn_cast<CompositeType>(refTy.getPointee())) {
+      if (!needClonePreprocess(compositeTy))
+        return;
+      for (auto [i, ty] : llvm::enumerate(compositeTy.getInnerTypes())) {
+        if (!needClonePreprocess(ty))
+          continue;
+        auto fieldRefTy =
+            RefType::get(getContext(), ty, refTy.getFreezingKind());
+        auto field = rewriter.create<ProjOp>(target.getLoc(), fieldRefTy,
+                                             target, rewriter.getIndexAttr(i));
+        generateClonePreprocess(rewriter, field);
+      }
+      return;
+    }
+
+    // for union type, expand it to index_switch
+    if (auto unionTy = dyn_cast<UnionType>(refTy.getPointee())) {
+      auto getTag = rewriter.create<UnionGetTagOp>(target.getLoc(), target);
+      llvm::SmallVector<int64_t> cases;
+      cases.resize(unionTy.getInnerTypes().size());
+      std::iota(cases.begin(), cases.end(), 0);
+      auto switchOp = rewriter.create<scf::IndexSwitchOp>(
+          target.getLoc(), TypeRange{}, getTag, cases,
+          unionTy.getInnerTypes().size());
+      for (auto [idx, ty] : llvm::enumerate(unionTy.getInnerTypes())) {
+        OpBuilder::InsertionGuard guard(rewriter);
+        auto &region = switchOp.getCaseRegions()[idx];
+        auto *blk = rewriter.createBlock(&region);
+        rewriter.setInsertionPointToStart(blk);
+        if (needClonePreprocess(ty)) {
+          auto fieldRef =
+              RefType::get(getContext(), ty, refTy.getFreezingKind());
+          auto ref = rewriter.create<UnionInspectOp>(
+              target.getLoc(), fieldRef, target, rewriter.getIndexAttr(idx));
+          generateClonePreprocess(rewriter, ref.getResult());
+        }
+        rewriter.create<scf::YieldOp>(target.getLoc());
+      }
+      // insert unreachable for the default case
+      {
+        OpBuilder::InsertionGuard guard(rewriter);
+        auto &region = switchOp.getDefaultRegion();
+        auto *blk = rewriter.createBlock(&region);
+        rewriter.setInsertionPointToStart(blk);
+        rewriter.create<UnreachableOp>(target.getLoc(), Type{});
+        rewriter.create<scf::YieldOp>(target.getLoc());
+      }
+      return;
+    }
+    return;
+  }
+
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(CloneOp op,
+                                PatternRewriter &rewriter) const final {
+    generateClonePreprocess(rewriter, op.getObject());
+    rewriter.replaceOpWithNewOp<LoadOp>(op, op.getType(), op.getObject());
+    return LogicalResult::success();
+  }
+};
+
 struct ReuseIRExpandControlFlowPass
     : public impl::ReuseIRExpandControlFlowBase<ReuseIRExpandControlFlowPass> {
   using ReuseIRExpandControlFlowBase::ReuseIRExpandControlFlowBase;
@@ -323,7 +417,7 @@ void ReuseIRExpandControlFlowPass::runOnOperation() {
   RewritePatternSet patterns(&getContext());
   patterns.add<DestroyExpansionPattern>(cache, &getContext());
   patterns.add<TokenEnsureExpansionPattern, TokenFreeExpansionPattern,
-               RegionRunExpansionPattern>(&getContext());
+               RegionRunExpansionPattern, CloneExpansionPattern>(&getContext());
 
   if (outlineNestedRelease)
     patterns.add<RcReleaseExpansionPattern<true>>(&getContext());

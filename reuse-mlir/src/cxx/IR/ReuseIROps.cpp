@@ -414,6 +414,24 @@ mlir::LogicalResult RcUniquifyOp::verify() {
     return emitOpError("can only be applied to a nonfreezing RC pointer");
   return mlir::success();
 }
+// TokenInitializeOp verification
+mlir::LogicalResult TokenInitializeOp::verify() {
+  auto module = this->getOperation()->getParentOfType<ModuleOp>();
+  if (!module)
+    return emitOpError("cannot find the module containing the operation");
+  DataLayout dataLayout{module};
+  auto size = dataLayout.getTypeSize(getValue().getType());
+  auto align = dataLayout.getTypeABIAlignment(getValue().getType());
+  if (getToken().getType().getAlignment() != align)
+    return emitOpError("expected to initialize a token of alignment ")
+           << align << ", but found a token of alignment "
+           << getToken().getType().getAlignment();
+  if (getToken().getType().getSize() != size)
+    return emitOpError("expected to initialize a token of size ")
+           << size.getFixedValue() << ", but found a token of size "
+           << getToken().getType().getSize();
+  return mlir::success();
+}
 } // namespace REUSE_IR_DECL_SCOPE
 } // namespace mlir
 

@@ -58,16 +58,16 @@ def TokenFreeOp : ReuseIR_Op<"token.free", []> {
   }];
 }
 
-def TokenReinterpretOp : ReuseIR_Op<"token.reinterpret"> {
-  let summary = "Reinterpret the token type";
+def TokenInitializeOp : ReuseIR_Op<"token.initialize"> {
+  let summary = "Initialize the token with certain value";
   let description = [{
-    `reuse_ir.token.reinterpret` reinterprets the token type.
+    `reuse_ir.token.initialize` initializes the token with certain value.
   }];
-  let results = (outs Res<ReuseIR_RefType, "reinterpreted reference">:$result);
-  let arguments = (ins Arg<ReuseIR_TokenType, "Token to reinterpret">:$token);
+  let arguments = (ins Arg<ReuseIR_TokenType, "Token to initialize", [MemWrite]>:$token, AnyType:$value);
   let assemblyFormat = [{
-    `(` $token `:` type($token) `)` attr-dict `:` type($result)
+    `token` `(` $token `:` type($token) `)` `value` `(` $value `:` type($value) `)` attr-dict
   }];
+  let hasVerifier = 1;
 }
 
 def TokenEnsureOp : ReuseIR_Op<"token.ensure"> {

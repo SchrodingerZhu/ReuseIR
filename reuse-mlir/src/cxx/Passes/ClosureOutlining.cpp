@@ -93,6 +93,37 @@ class ReuseIRClosureOutliningPattern : public OpRewritePattern<ClosureNewOp> {
     rewriter.create<func::ReturnOp>(op->getLoc());
   }
 
+  void emitOutlinedClone(ClosureNewOp op, PatternRewriter &rewriter,
+                         func::FuncOp cloneFunc, RefType argPackRefTy,
+                         FreezingKindAttr nonfreezing) const {
+    mlir::OpBuilder::InsertionGuard guard(rewriter);
+    auto *entryBlock = cloneFunc.addEntryBlock();
+    auto argPackTy = cast<CompositeType>(argPackRefTy.getPointee());
+    auto argPackLayout = argPackTy.getCompositeLayout(dataLayout);
+    auto refToArgPack = entryBlock->getArgument(0);
+    auto appliedByteOffset = entryBlock->getArgument(1);
+    rewriter.setInsertionPointToStart(entryBlock);
+    for (auto [idx, ty] : llvm::enumerate(argPackTy.getInnerTypes())) {
+      if (ty.isIntOrIndexOrFloat())
+        continue;
+      auto offset = argPackLayout.getField(idx).byteOffset;
+      auto offsetVal =
+          rewriter.create<arith::ConstantIndexOp>(op->getLoc(), offset);
+      auto greaterThan = rewriter.create<arith::CmpIOp>(
+          op->getLoc(), arith::CmpIPredicate::ugt, appliedByteOffset,
+          offsetVal);
+      rewriter.create<mlir::scf::IfOp>(
+          op->getLoc(), greaterThan, [&](OpBuilder &builder, Location loc) {
+            auto proj = builder.create<ProjOp>(
+                loc, RefType::get(getContext(), ty, nonfreezing), refToArgPack,
+                builder.getIndexAttr(idx));
+            builder.create<DestroyOp>(loc, proj, IntegerAttr{});
+            builder.create<mlir::scf::YieldOp>(loc);
+          });
+    }
+    rewriter.create<func::ReturnOp>(op->getLoc());
+  }
+
 public:
   template <typename... Args>
   ReuseIRClosureOutliningPattern(
@@ -147,7 +178,7 @@ public:
     lambdaDropOp.setPrivate();
     emitOutlinedFunc(op, rewriter, lambdaFuncOp, argPackRefTy, nonfreezing);
     emitOutlinedDrop(op, rewriter, lambdaDropOp, argPackRefTy, nonfreezing);
-    // TODO: emit clone and drop functions
+    emitOutlinedClone(op, rewriter, lambdaCloneOp, argPackRefTy, nonfreezing);
     rewriter.create<ClosureVTableOp>(op->getLoc(), lambdaVtableName,
                                      op.getClosureType(), lambdaFuncName,
                                      lambdaCloneName, lambdaDropName);
