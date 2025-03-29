@@ -995,7 +995,7 @@ fn prune_type(
             return Err(crate::Error::InvalidUnification(Error::Unsupported));
         };
         let var = with_span(Value::var(renaming.cod), x.span);
-        if mask.is_none() {
+        if mask.is_some() {
             let arg_ty = renaming.rename(arg_ty.clone(), mctx)?;
             let hole = TERM_PLACEHOLDER.with(|hole| hole.clone());
             *cursor = with_span(Term::Pi(*x, *icit, arg_ty, hole), ty.span);
@@ -1030,7 +1030,7 @@ where
         return Err(crate::Error::InvalidUnification(Error::SolvedMeta));
     };
     let len = pruning.len();
-    let term_type = prune_type(pruning.clone().rev(), ty.clone(), mctx)?;
+    let term_type = prune_type(pruning.clone(), ty.clone(), mctx)?;
     let pruned_ty = Environment::new().evaluate(term_type.clone(), mctx)?;
     let span = pruned_ty.span;
     let new_meta = mctx.new_meta(pruned_ty, blocking);
