@@ -381,6 +381,8 @@ impl Elaborator {
         Ok((term, ty))
     }
     pub fn check(&mut self, term: SurfPtr, ty: ValuePtr) -> Result<TermPtr> {
+        let term_span = term.span;
+        let ty = self.meta.force(ty)?;
         trace!(
             "checking term {} against type {}",
             **term,
@@ -388,8 +390,6 @@ impl Elaborator {
                 .unwrap()
                 .with_ctx(&self.ctx)
         );
-        let term_span = term.span;
-        let ty = self.meta.force(ty)?;
         let check_on_pi =
             |this: &mut Elaborator, term: SurfPtr, body: &Closure, name: Name, arg_ty: ValuePtr| {
                 let var = with_span(Value::var(this.ctx.level), name.span);
