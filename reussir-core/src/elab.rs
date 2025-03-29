@@ -1044,7 +1044,7 @@ where
     );
     let solution_lvl = DBLvl(len);
     let solution_lambda = stack_lambdas(solution_lvl, ty.clone(), solution_body, mctx)?;
-    trace!("after pruning, solution is {}", **solution_lambda);
+    trace!("after pruning, solution of ?{} is {}", meta.0, **solution_lambda);
     let solution = Environment::new().evaluate(solution_lambda, mctx)?;
     mctx.set_meta(meta, MetaEntry::Solved { val: solution, ty });
     Ok(new_meta)

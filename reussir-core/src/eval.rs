@@ -96,9 +96,8 @@ impl Environment {
         assert_eq!(self.0.len(), pruning.len(), "pruning length mismatch");
         pruning
             .iter()
-            .rev()
             .copied()
-            .zip(self.0.iter().rev().cloned())
+            .zip(self.0.iter().cloned())
             .filter_map(|(a, b)| a.map(|i| (i, b)))
             .try_fold(value, |acc, (icit, value)| {
                 app_val(acc, value, icit, meta, span)
